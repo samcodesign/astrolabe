@@ -31,6 +31,7 @@ export function App({ session }: { session: EngineSession }) {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [showUpdate, setShowUpdate] = useState(false);
   const checkedRef = useRef(false);
+  const [repairNote, setRepairNote] = useState<string | null>(null);
 
   // The engine loads Path of Building's data at boot, so there is no point
   // starting it before the data exists. On a fresh install this gate is the
@@ -107,14 +108,58 @@ export function App({ session }: { session: EngineSession }) {
     state.connection === "handshake" ||
     (state.connection === "failed" && !state.build);
 
-  if (booting) {
-    return (
-      <Splash
-        state={state}
-        onRetry={() => {
-          void session.connect();
+  // Rendered by both the failure screen and the workspace. `booting` returns
+  // early, so a dialog declared only in the main branch can be opened from the
+  // Splash and never mount — which is exactly what "Repair game data" did.
+  const updateDialog =
+    showUpdate && update ? (
+      <UpdateDialog
+        info={update}
+        session={session}
+        onClose={() => setShowUpdate(false)}
+        onApplied={() => {
+          setShowUpdate(false);
+          setUpdate(null);
+          setRepairNote(null);
         }}
       />
+    ) : null;
+
+  if (booting) {
+    return (
+      <>
+        <Splash
+        state={state}
+        onRetry={() => {
+          setRepairNote(null);
+          void session.connect();
+        }}
+        repairNote={repairNote}
+        {...(data?.updatable
+          ? {
+              // The engine most often refuses to start because its game data is
+              // incomplete — one missing file that PoB loads at boot kills init.
+              // `data_check` needs no engine, so the repair is reachable from
+              // here even though the toolbar chip is not.
+              onRepairData: () => {
+                void checkForUpdate()
+                  .then((info) => {
+                    if (info?.available) {
+                      setUpdate(info);
+                      setShowUpdate(true);
+                    } else {
+                      setRepairNote(
+                        "The game data looks complete, so the engine is failing for another reason. The log below is the best clue.",
+                      );
+                    }
+                  })
+                  .catch((e) => setRepairNote(String(e)));
+              },
+            }
+          : {})}
+        />
+        {updateDialog}
+      </>
     );
   }
 
@@ -161,17 +206,7 @@ export function App({ session }: { session: EngineSession }) {
         </div>
       )}
 
-      {showUpdate && update && (
-        <UpdateDialog
-          info={update}
-          session={session}
-          onClose={() => setShowUpdate(false)}
-          onApplied={() => {
-            setShowUpdate(false);
-            setUpdate(null);
-          }}
-        />
-      )}
+      {updateDialog}
 
       {showDiagnostics && (
         <Diagnostics session={session} onClose={() => setShowDiagnostics(false)} />

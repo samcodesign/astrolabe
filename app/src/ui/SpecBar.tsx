@@ -36,7 +36,7 @@ export function SpecBar({ session }: { session: EngineSession }) {
         const active = spec.id === specs.activeId;
         const isCompare = spec.id === specs.compareId;
         return (
-          <div key={spec.id} style={{ position: "relative", display: "flex" }}>
+          <div key={spec.id} className="spec-tab-group">
             <button
               type="button"
               role="tab"
@@ -66,20 +66,32 @@ export function SpecBar({ session }: { session: EngineSession }) {
                   <span>{spec.title}</span>
                   <span className="spec-tab__points">{spec.pointsUsed}</span>
                   {isCompare && <span className="spec-tab__compare">VS</span>}
-                  <span
-                    className="spec-tab__menu"
-                    role="button"
-                    aria-label={`Actions for ${spec.title}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openMenu(spec.id, e.currentTarget);
-                    }}
-                  >
-                    ⌄
-                  </span>
                 </>
               )}
             </button>
+
+            {/* A sibling, not a child of the tab.
+                Interactive elements may not nest: a `<button>` inside a
+                `<button>` is invalid HTML, browsers disagree about which one
+                receives the click, and screen readers announce a button inside
+                a button. It was rendered as `<span role="button">` inside the
+                tab, which has all the same problems and merely hides them from
+                the validator. */}
+            {renaming !== spec.id && (
+              <button
+                type="button"
+                className="spec-tab__menu"
+                aria-label={`Actions for ${spec.title}`}
+                aria-haspopup="menu"
+                aria-expanded={menuFor?.id === spec.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openMenu(spec.id, e.currentTarget);
+                }}
+              >
+                ⌄
+              </button>
+            )}
 
             {menuFor?.id === spec.id && (
               <SpecMenu

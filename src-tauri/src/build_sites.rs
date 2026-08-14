@@ -150,13 +150,6 @@ fn raw_url_for(link: &str) -> Option<(&'static Site, String)> {
     None
 }
 
-/// True when the input looks like a link rather than a build code, so the UI
-/// can route it without asking the user which it is.
-pub fn looks_like_url(input: &str) -> bool {
-    let t = input.trim();
-    t.starts_with("https://") || t.starts_with("http://")
-}
-
 /// Fetch the raw build code behind a supported link.
 pub async fn fetch_build_code(link: String) -> Result<String, FetchError> {
     let Some((site, url)) = raw_url_for(&link) else {
@@ -253,14 +246,5 @@ mod tests {
         ] {
             assert!(raw_url_for(link).is_none(), "{link} must not be fetched");
         }
-    }
-
-    #[test]
-    fn tells_a_link_from_a_code() {
-        assert!(looks_like_url("https://pobb.in/abc"));
-        assert!(looks_like_url("  http://pastebin.com/x  "));
-        // A build code is bare base64url and must not be mistaken for a link.
-        assert!(!looks_like_url("eNrtPWtzm8iyn1e_gnLVuV"));
-        assert!(!looks_like_url(""));
     }
 }

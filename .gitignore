@@ -18,6 +18,9 @@ staging/
 fixtures/*.json
 !fixtures/*.sample.json
 
+# Build logs
+*.log
+
 # Local config and editor noise
 .claude/settings.local.json
 .env

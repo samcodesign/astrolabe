@@ -119,6 +119,16 @@ export interface CreateTreeRendererOptions {
 export const IS_STUB = false;
 
 /**
+ * Art GGG lists in `sprites.lua` and ships no file for.
+ *
+ * Reporting these on every tree load trains people to ignore the channel, which
+ * defeats the point of having it — the hook exists because a silently missing
+ * sheet once hid every timeless-jewel node icon behind a bare frame. Anything
+ * not named here is a real failure and still gets logged.
+ */
+const KNOWN_ABSENT_SHEETS = new Set(["PassiveMasteryConnectedButton.png"]);
+
+/**
  * Where the sheet paths in `TreeGeometry.sheets` are resolved against.
  *
  * Under the dev server a Vite middleware mounts Path of Building's `src` at
@@ -195,6 +205,7 @@ export function createTreeRenderer(
       // frames for as long as they did because no sheet, and no error, ever
       // reached anyone. It costs one line to make the next one say so.
       onSheetError: (sheet, err) => {
+        if (KNOWN_ABSENT_SHEETS.has(sheet)) return;
         console.error(`tree art: sheet "${sheet}" failed to load`, err);
       },
     });

@@ -46,9 +46,23 @@ const STEPS: StepDef[] = [
 export function Splash({
   state,
   onRetry,
+  onRepairData,
+  repairNote,
 }: {
   state: AppState;
   onRetry: () => void;
+  /**
+   * Offered alongside "Try again" when the engine will not start.
+   *
+   * The most likely reason it will not start is that its game data is
+   * incomplete — delete one file PoB loads at boot and the host dies during
+   * init. Retrying re-runs the same broken load forever, and the repair the app
+   * already knows how to do is only reachable from the toolbar, which needs a
+   * *running* engine. That is a dead end with no way out; this is the way out.
+   */
+  onRepairData?: () => void;
+  /** Result of a repair attempt, when it had nothing to fix or itself failed. */
+  repairNote?: string | null;
 }) {
   const elapsed = useElapsed(state.connection !== "ready" && state.connection !== "failed");
   const failed = state.connection === "failed";
@@ -123,10 +137,23 @@ export function Splash({
           </div>
         )}
 
+        {failed && repairNote && (
+          <div className="splash__error">
+            <Banner kind="info">{repairNote}</Banner>
+          </div>
+        )}
+
         {failed && (
-          <Button variant="primary" onClick={onRetry}>
-            Try again
-          </Button>
+          <div className="splash__actions">
+            <Button variant="primary" onClick={onRetry}>
+              Try again
+            </Button>
+            {onRepairData && (
+              <Button variant="ghost" onClick={onRepairData}>
+                Repair game data
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>

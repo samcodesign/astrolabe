@@ -550,6 +550,11 @@ button {
   width: 100%;
   text-align: left;
 }
+.splash__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 
 /* Determinate only. The first-run download reports per file, so there is always
    a real fraction to show — an indeterminate bar here would be pretending. */
@@ -906,28 +911,43 @@ button {
 .specbar::-webkit-scrollbar {
   display: none;
 }
+/* The tab and its chevron are siblings — interactive elements cannot nest —
+   so the group carries the surface and they sit inside it looking like one
+   control. `:has()` lets the wrapper react to the tab's own selected state
+   without duplicating it into React. */
+.spec-tab-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 120ms ease;
+}
+.spec-tab-group:hover {
+  background: var(--surface-2);
+}
+.spec-tab-group:has(.spec-tab[aria-selected="true"]) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
 .spec-tab {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   height: 32px;
-  padding: 0 6px 0 12px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  padding: 0 4px 0 12px;
+  border: none;
   background: transparent;
   color: var(--text-2);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms ease, color 120ms ease;
+  transition: color 120ms ease;
 }
-.spec-tab:hover {
-  background: var(--surface-2);
+.spec-tab-group:hover .spec-tab {
   color: var(--text);
 }
 .spec-tab[aria-selected="true"] {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
   color: var(--text);
   font-weight: 550;
 }
@@ -945,10 +965,16 @@ button {
 .spec-tab__menu {
   width: 20px;
   height: 20px;
+  margin-right: 6px;
   display: grid;
   place-items: center;
+  border: none;
+  background: transparent;
   border-radius: 4px;
   color: var(--text-3);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
 }
 .spec-tab__menu:hover {
   background: var(--surface-hover);
