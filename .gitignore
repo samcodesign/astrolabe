@@ -1,0 +1,32 @@
+# Build artefacts — currently ~3 GB across the Rust and Node trees.
+target/
+node_modules/
+dist/
+.vite/
+
+# The vendored Path of Building copy the updater manages. Never commit it:
+# TreeData alone is 554 MB across 41 immutable tree snapshots, and the updater
+# can reconstruct any of it from upstream by manifest SHA1.
+vendor/
+
+# Updater working state
+staging/
+*.blob
+.txn/
+
+# Fixtures generated from the engine host. Regenerable; some are large.
+fixtures/*.json
+!fixtures/*.sample.json
+
+# Local config and editor noise
+.claude/settings.local.json
+.env
+.env.local
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Built sidecars staged for the installer by tools/stage-bundle.mjs
+src-tauri/bundle-resources/

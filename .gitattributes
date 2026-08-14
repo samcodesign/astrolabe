@@ -1,0 +1,21 @@
+# Normalise line endings in the repository, check out native.
+* text=auto
+
+# Byte-exact recordings of what raw.githubusercontent.com actually serves.
+#
+# `crlf_test.rs` asserts their SHA1s against a real PoB manifest, and the whole
+# point of those fixtures is that the served bytes are LF while the manifest
+# hash is of the CRLF-normalised form. Let git convert them on checkout and the
+# recordings stop being recordings — the tests fail on every machine where
+# autocrlf is on, which on Windows is the default.
+tools/updater/tests/fixtures/*_lf.lua -text
+
+# Lua the engine loads from PoB's tree is hashed by the updater; never convert.
+*.lua -text
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary

@@ -1,0 +1,164 @@
+:root {
+  --bg: #070910;
+  --panel: rgba(15, 19, 28, 0.82);
+  --line: #242c3c;
+  --text: #d8dfec;
+  --muted: #8593ab;
+  --accent: #7fc4ff;
+  --gold: #ffd98a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 13px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+}
+
+/* A faint vignette + grain gives the canvas depth without costing a frame. */
+#stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 45%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+.panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 258px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px) saturate(1.25);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.panel__head { padding: 13px 14px 11px; border-bottom: 1px solid var(--line); }
+.panel__title { font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
+.panel__sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+.panel__sec { padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.panel__sec:last-child { border-bottom: 0; }
+
+.lbl {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6d7b93;
+  margin-bottom: 7px;
+}
+
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid #2c3446;
+  background: linear-gradient(#1c2231, #161b27);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+}
+button:hover { background: linear-gradient(#232b3c, #1a2030); border-color: #3a465e; }
+button:active { transform: translateY(1px); }
+button.primary { border-color: #2f5b7d; background: linear-gradient(#1b3247, #142534); color: #b9ddff; }
+button.primary:hover { background: linear-gradient(#224060, #172c40); }
+button[data-on="1"] { border-color: #6a5726; background: linear-gradient(#3a3016, #2a230f); color: var(--gold); }
+
+input[type="search"] {
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid #2c3446;
+  background: #11151f;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+input[type="search"]:focus { outline: none; border-color: #3d6f96; box-shadow: 0 0 0 3px rgba(61, 111, 150, 0.18); }
+
+.hint { margin-top: 6px; font-size: 11px; color: var(--muted); }
+
+.progress { margin-top: 9px; display: flex; align-items: center; gap: 8px; }
+.progress__bar { flex: 1; height: 4px; border-radius: 3px; background: #1b2130; overflow: hidden; }
+.progress__bar > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #2a86a2, #93c96a, #f0cf5c);
+  transition: width 0.18s ease-out;
+}
+.progress__txt { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 62px; text-align: right; }
+
+.legend { margin-top: 10px; }
+.legend__ramp { height: 7px; border-radius: 4px; }
+.legend__ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
+.legend__key { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+.legend__key .dash {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 1.5px dashed #6d7b93;
+  display: inline-block;
+  flex: none;
+}
+
+.hud {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  z-index: 10;
+  white-space: pre;
+  pointer-events: none;
+}
+.hud b { color: var(--text); font-weight: 600; }
+
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  z-index: 10;
+}
+
+/* Live stat delta injected into the tooltip's app-owned slot. */
+.delta-grid { display: grid; gap: 3px; }
+.delta-row { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.delta-row span:first-child { color: #7d8aa1; }
+.up { color: #5fdc98; }
+.down { color: #ff7b83; }

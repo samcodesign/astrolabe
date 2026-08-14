@@ -1,0 +1,50 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<PoBVersion>
+	<Version number="2.68.0" platform="win32" branch="dev" />
+	<Source part="default" url="https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/{branch}/" />
+	<Source part="runtime" platform="win32" url="https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/{branch}/runtime/" />
+	<Source part="program" url="https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/{branch}/src/" />
+	<Source part="tree" url="https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/{branch}/src/" />
+	<File name="changelog.txt" part="default" sha1="fb4064c729074463baff1984f097aef0eedf8339" />
+	<File name="help.txt" part="default" sha1="e486cb63a78f5ca355430b67fa23e02fd30f5771" />
+	<File name="LICENSE.md" part="default" sha1="c77635aa1ba0a2ffe8eb72f93b3376e3a3d2041a" />
+	<File name="Assets/ascendancypassiveheaderleft.png" part="program" sha1="6a65683dcc3b14382dc083198fe9361454e91b15" />
+	<File name="Assets/ascendancypassiveheadermiddle.png" part="program" sha1="79ccf100c4154d8f65544e2b32d44a612b7007c0" />
+	<File name="Assets/ascendancypassiveheaderright.png" part="program" sha1="dbb86c1b8b51019379e52cd1f8b2a9edee07a3f6" />
+	<File name="Data/Bases/fishing.lua" part="program" sha1="f38e34d1cbf39fad25111eba0336e659dc981eb8" />
+	<File name="Data/Bases/amulet.lua" part="program" sha1="0c35de0a6731169f674fee440af79e5215ba627e" />
+	<File name="Data/Bases/axe.lua" part="program" sha1="0b7a87867c677b95ccf1bdd0937f0874857f35af" />
+	<File name="Data/Bases/belt.lua" part="program" sha1="2ac4a895bba5dfe57fe8bcb90ead339a4b896cc3" />
+	<File name="Modules/Build.lua" part="program" sha1="1ef2cc076312e8f79506dc9e56b7c486a88df584" />
+	<File name="Modules/BuildDisplayStats.lua" part="program" sha1="f1b0f89f803ae4493154ca5b78ddda457679dd30" />
+	<File name="Path{space}of{space}Building.exe" part="runtime" runtime="win32" sha1="8dcd46aac0b70d0a4d5eac5c7244302c9b805f85" />
+	<File name="abseil_dll.dll" part="runtime" runtime="win32" sha1="9bcb9ca812e69350cca49c7ccaa507371e52a50d" />
+	<File name="concrt140.dll" part="runtime" runtime="win32" sha1="1ce87fac4c22aae82a81ddb26952c074b744e78d" />
+	<File name="TreeData/3_25/sprites.lua" part="tree" sha1="0a067e68f203f4698c5b4e14f16b0a7fe52bf170" />
+	<File name="TreeData/3_25/ascendancy-3.png" part="tree" sha1="caed47911e769df545a764fd5e81748f02a200c4" />
+	<File name="TreeData/3_27/tree.lua" part="tree" sha1="f01a4c9776966e53f6d54894590350a88c5f7d25" />
+	<File name="TreeData/3_27/sprites.lua" part="tree" sha1="1ad9ab2d3b14d5ffdf805160df56e04aa90cd585" />
+	<File name="TreeData/3_27/frame-3.png" part="tree" sha1="523092448a1cdf8364abd9df20000c23c982d544" />
+	<File name="TreeData/3_26/ascendancy-3.png" part="tree" sha1="caed47911e769df545a764fd5e81748f02a200c4" />
+	<File name="TreeData/3_26/ascendancy-background-3.jpg" part="tree" sha1="7c2d1bf35472dcf931a6b60cca7441dde5f5a837" />
+	<File name="TreeData/3_26/ascendancy-background-3.png" part="tree" sha1="b7ae547eb114a95048bee06578a821f81aba770b" />
+	<File name="TreeData/3_26/background-3.png" part="tree" sha1="be530e9012afe953967420ef2aab06db68fbf341" />
+	<File name="TreeData/3_26/frame-3.png" part="tree" sha1="523092448a1cdf8364abd9df20000c23c982d544" />
+	<File name="TreeData/3_26/group-background-3.png" part="tree" sha1="b0aa020c855beabb2f7c47d00241379b1ec6de0a" />
+	<File name="TreeData/3_26/jewel-3.png" part="tree" sha1="758ae69e9644926fc8f4b60b45a77a438305d99a" />
+	<File name="TreeData/3_26/jewel-radius.png" part="tree" sha1="6f10b1a56349d14fba4247cb399f09771ae92be7" />
+	<File name="TreeData/3_26/line-3.png" part="tree" sha1="2e4698a40a457f13ac69ba2505acaf574efcc1a5" />
+	<File name="TreeData/3_26/mastery-3.png" part="tree" sha1="ba9c16a9b3608bd2c7f82ab2f8c679700a75eea3" />
+	<File name="TreeData/3_26/mastery-active-effect-3.png" part="tree" sha1="dc238fef8a7c69c5b2b41a16008418c390aace25" />
+	<File name="TreeData/3_26/mastery-active-selected-3.png" part="tree" sha1="636f19b9efa0c7d106d24c4c43b93684d5f9bf3d" />
+	<File name="TreeData/3_26/mastery-connected-3.png" part="tree" sha1="6de05de82a4916ca9e492071ae7533c529ac4b60" />
+	<File name="TreeData/3_26/mastery-disabled-3.png" part="tree" sha1="b5f14579abd5a52fc761ba0d013f1a4b2253b611" />
+	<File name="TreeData/3_26/skills-3.jpg" part="tree" sha1="142788c23289a60ca1cbbd9ea8413e030999b068" />
+	<File name="TreeData/3_26/skills-disabled-3.jpg" part="tree" sha1="cc15193961b4a31055eb46b33b27b57bf09b8098" />
+	<File name="TreeData/3_26/sprites.lua" part="tree" sha1="93fd965ee0b2e668eb8277dbc7f5e2233ce94d99" />
+	<File name="TreeData/3_26/tattoo-active-effect-3.png" part="tree" sha1="8d1f8944f2f92f48c42522f1a34b9deea83fdf25" />
+	<File name="TreeData/3_26/tree.lua" part="tree" sha1="f75db83a7c4dbf32579ca9f7c56922ca9924d375" />
+	<File name="Data/Bases/newweapon.lua" part="program" sha1="1111111111111111111111111111111111111111" />
+	<File name="TreeData/3_29/tree.lua" part="tree" sha1="2222222222222222222222222222222222222222" />
+	<File name="TreeData/3_29/sprites.lua" part="tree" sha1="3333333333333333333333333333333333333333" />
+</PoBVersion>

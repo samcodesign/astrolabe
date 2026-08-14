@@ -1,0 +1,24 @@
+[package]
+name = "engine-host"
+version = "0.1.0"
+edition = "2021"
+description = "Embeds LuaJIT and drives Path of Building's headless calculation engine."
+
+[dependencies]
+# LuaJIT specifically: PoB uses bit.* at module scope (Common.lua:18-20), so
+# plain Lua 5.1 would need luabitop and 5.3+ will not work at all.
+# `vendored` builds LuaJIT from source so we carry no external Lua dependency.
+mlua = { version = "0.10", features = ["luajit", "vendored"] }
+# PoB's `Deflate`/`Inflate` are zlib streams (its runtime ships zlib1.dll, and
+# share codes base64-decode to a 0x78 zlib header). miniz_oxide keeps this a
+# pure-Rust dependency, so the host still builds with no system libraries.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+# Tests only: the host itself never parses JSON in Rust — that is Lua's job —
+# but the test harness has to read the protocol it emits.
+serde_json = "1"
+
+[[bin]]
+name = "engine-host"
+path = "src/main.rs"

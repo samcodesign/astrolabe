@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Passive tree renderer — demo</title>
+    <link rel="stylesheet" href="/demo/demo.css" />
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <aside class="panel" id="panel">
+      <header class="panel__head">
+        <div class="panel__title">Passive tree</div>
+        <div class="panel__sub" id="treeInfo">loading…</div>
+      </header>
+
+      <section class="panel__sec">
+        <div class="lbl">Class</div>
+        <div class="row">
+          <select id="classSel"></select>
+          <select id="ascendSel"></select>
+        </div>
+        <div class="hint" id="classInfo">changing class resets the tree</div>
+      </section>
+
+      <section class="panel__sec">
+        <div class="lbl">Allocation</div>
+        <div class="row">
+          <button data-act="alloc-demo">Sample build</button>
+          <button data-act="alloc-clear">Clear</button>
+        </div>
+        <div class="hint" id="allocInfo">click a node to allocate · hover previews the path</div>
+      </section>
+
+      <section class="panel__sec">
+        <div class="lbl">Value per point</div>
+        <div class="row">
+          <button data-act="power-run" class="primary">Run power pass</button>
+          <button data-act="power-off">Off</button>
+        </div>
+        <div class="progress" id="powerProgress" hidden>
+          <div class="progress__bar"><i id="powerBar"></i></div>
+          <div class="progress__txt" id="powerTxt">0 / 0</div>
+        </div>
+        <div class="legend" id="powerLegend" hidden>
+          <div class="legend__ramp" id="powerRamp"></div>
+          <div class="legend__ends"><span>low</span><span>high</span></div>
+          <div class="legend__key">
+            <span class="dash"></span> dashed ring = not evaluated yet
+          </div>
+        </div>
+      </section>
+
+      <section class="panel__sec">
+        <div class="lbl">Search</div>
+        <input id="search" type="search" placeholder="life, crit, Resolute…" autocomplete="off" />
+        <div class="hint" id="searchInfo">rings matches, dims the rest</div>
+      </section>
+
+      <section class="panel__sec">
+        <div class="lbl">Compare</div>
+        <div class="row">
+          <button data-act="compare-on">Compare variant</button>
+          <button data-act="compare-off">Off</button>
+        </div>
+        <div class="hint" id="compareInfo">green added · red removed</div>
+      </section>
+
+      <section class="panel__sec">
+        <div class="lbl">View</div>
+        <div class="row">
+          <button data-act="zoom-in">+</button>
+          <button data-act="zoom-out">−</button>
+          <button data-act="reset">Reset</button>
+          <button data-act="jewels">Jewel radii</button>
+        </div>
+      </section>
+    </aside>
+
+    <div class="hud" id="hud"></div>
+    <div class="toast" id="toast" hidden></div>
+
+    <script type="module" src="/demo/main.ts"></script>
+  </body>
+</html>
