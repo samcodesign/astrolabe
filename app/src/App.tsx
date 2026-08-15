@@ -12,13 +12,18 @@ import {
   type UpdateInfo,
 } from "./platform/gamedata";
 import { useStore } from "./state/store";
+import { ConfigPanel } from "./ui/ConfigPanel";
 import { UpdateChip, UpdateDialog } from "./ui/DataUpdate";
 import { Diagnostics } from "./ui/Diagnostics";
 import { FirstRun } from "./ui/FirstRun";
 import { ImportScreen } from "./ui/ImportScreen";
+import { MainSkillBar } from "./ui/MainSkillBar";
+import { ItemsPanel } from "./ui/ItemsPanel";
+import { SkillsPanel } from "./ui/SkillsPanel";
 import { SpecBar } from "./ui/SpecBar";
 import { Splash } from "./ui/Splash";
 import { StatPanel } from "./ui/StatPanel";
+import { Tabs, type TabDef } from "./ui/Tabs";
 import { TopBar } from "./ui/TopBar";
 import { TreeStage } from "./ui/TreeStage";
 import { Banner } from "./ui/primitives";
@@ -32,6 +37,25 @@ export function App({ session }: { session: EngineSession }) {
   const [showUpdate, setShowUpdate] = useState(false);
   const checkedRef = useRef(false);
   const [repairNote, setRepairNote] = useState<string | null>(null);
+  const [tab, setTab] = useState("tree");
+
+  // PoB's own order: Tree, Skills, Items, Config. Ctrl+1..4 follow the order
+  // of this list, so it is also the keyboard binding.
+  const tabs: TabDef[] = [
+    {
+      id: "tree",
+      label: "Tree",
+      content: (
+        <>
+          <SpecBar session={session} />
+          <TreeStage session={session} />
+        </>
+      ),
+    },
+    { id: "skills", label: "Skills", content: <SkillsPanel session={session} /> },
+    { id: "items", label: "Items", content: <ItemsPanel session={session} /> },
+    { id: "config", label: "Config", content: <ConfigPanel session={session} /> },
+  ];
 
   // The engine loads Path of Building's data at boot, so there is no point
   // starting it before the data exists. On a fresh install this gate is the
@@ -185,11 +209,16 @@ export function App({ session }: { session: EngineSession }) {
               : {})}
           />
           <div className="body">
-            <div className="stage" style={{ display: "flex", flexDirection: "column" }}>
-              <SpecBar session={session} />
-              <TreeStage session={session} />
+            <div className="stage">
+              <Tabs tabs={tabs} active={tab} onChange={setTab} />
             </div>
-            <StatPanel session={session} />
+            {/* The sidebar is shared by every tab, as PoB's is: the skill
+                selector and the stats it produces belong together and belong
+                on screen whatever you are editing. */}
+            <div className="side">
+              <MainSkillBar session={session} />
+              <StatPanel session={session} />
+            </div>
           </div>
         </div>
       )}

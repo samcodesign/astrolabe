@@ -69,7 +69,16 @@ export function TreeStage({ session }: { session: EngineSession }) {
     const renderer = createTreeRenderer();
     renderer.mount(hostRef.current);
     rendererRef.current = renderer;
-    const onResize = () => renderer.resize();
+
+    // A hidden tab panel measures 0x0, and resizing the canvas to that is worse
+    // than doing nothing: it discards the viewport and there is nothing to draw
+    // into. Skip it and keep the last good size, which is the one we want back
+    // when the tab returns anyway.
+    const onResize = () => {
+      const box = hostRef.current?.getBoundingClientRect();
+      if (!box || box.width < 1 || box.height < 1) return;
+      renderer.resize();
+    };
 
     // Clicking an unallocated node of an ascendancy the build does not have is
     // a class switch. The engine will not make a destructive one unasked, so a
@@ -130,8 +139,18 @@ export function TreeStage({ session }: { session: EngineSession }) {
     });
 
     window.addEventListener("resize", onResize);
+
+    // The window is not the only thing that resizes the canvas. The tree lives
+    // in a tab panel that is hidden rather than unmounted, so it goes to 0x0
+    // and back without the window changing size at all; on the way back the
+    // canvas would keep the dead viewport and draw nothing. Observing the host
+    // covers that and any future layout change for free.
+    const observer = new ResizeObserver(onResize);
+    observer.observe(hostRef.current);
+
     return () => {
       window.removeEventListener("resize", onResize);
+      observer.disconnect();
       offAscendancy();
       offClick();
       offHover();

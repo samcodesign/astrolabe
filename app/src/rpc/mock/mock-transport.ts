@@ -21,7 +21,13 @@
 import type {
   BuildSummary,
   DisplayStat,
+  Item,
   Methods,
+  ConfigState,
+  CustomModBlock,
+  ItemsState,
+  MainSkillSelection,
+  SkillsState,
   NodeId,
   NodePower,
 } from "@schema/rpc";
@@ -32,8 +38,25 @@ import {
 } from "@poe-planner/tree-renderer-pkg";
 import { Emitter, type HostState, type Transport } from "../transport";
 import {
+  applyMainSkill,
+  applyConfigSetEdit,
+  applySkillEdit,
+  applyCustomModEdit,
+  applyItemEdit,
+  applySkillSetEdit,
   MOCK_TREE_VERSION,
+  mockConfigSchema,
+  mockConfigState,
+  mockCustomMods,
+  mockGemCatalogue,
   mockGeometry,
+  mockItems,
+  mockMainSkill,
+  mockModPool,
+  mockModSources,
+  mockSkills,
+  mockValidateMods,
+  mockStatDeltas,
   mockStats,
   mockSummary,
 } from "./fixtures";
@@ -113,6 +136,11 @@ export class MockTransport implements Transport {
   #opts: Required<Pick<MockTransportOptions, "speed">> & MockTransportOptions;
   #summary: BuildSummary = mockSummary();
   #baseline: DisplayStat[] = mockStats();
+  #mainSkill: MainSkillSelection = mockMainSkill();
+  #config: ConfigState = mockConfigState();
+  #skills: SkillsState = mockSkills();
+  #customMods: CustomModBlock[] = mockCustomMods();
+  #items: ItemsState = mockItems();
   #loadedVersions = new Set<string>();
   #timers = new Set<ReturnType<typeof setTimeout>>();
   #powerCancelled = false;
@@ -278,6 +306,322 @@ export class MockTransport implements Transport {
 
       case "build.summary":
         return ok(this.#summary);
+
+      case "skills.mainSelection":
+        return ok(this.#mainSkill);
+
+      case "skills.list":
+        return ok(this.#skills);
+
+      case "skills.gemCatalogue":
+        return ok({ gems: mockGemCatalogue() });
+
+      // Every skills mutation answers with the same shape, so the mock applies
+      // the edit to its own copy and replies once.
+      case "skills.newSet":
+      case "skills.activateSet":
+      case "skills.deleteSet":
+      case "skills.renameSet": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        const { skills, createdSet } = applySkillSetEdit(this.#skills, method, params);
+        this.#skills = skills;
+        if (method === "skills.renameSet") return ok({ skills });
+        const res: Record<string, unknown> = {
+          summary: this.#summary,
+          stats: this.#baseline,
+          skills,
+          mainSkill: this.#mainSkill,
+        };
+        if (createdSet != null) res["createdSet"] = createdSet;
+        return ok(res);
+      }
+
+      case "skills.addGroup":
+      case "skills.setGroup":
+      case "skills.deleteGroup":
+      case "skills.setGem":
+      case "skills.deleteGem":
+      case "skills.setImbuedSupport":
+      case "skills.reorderGem": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        const { skills, addedGroup } = applySkillEdit(this.#skills, method, params);
+        this.#skills = skills;
+        const res: Record<string, unknown> = {
+          summary: this.#summary,
+          stats: this.#baseline,
+          skills: this.#skills,
+          mainSkill: this.#mainSkill,
+        };
+        if (addedGroup != null) res["addedGroup"] = addedGroup;
+        return ok(res);
+      }
+
+      case "config.newSet":
+      case "config.activateSet":
+      case "config.deleteSet":
+      case "config.renameSet": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        const { config, createdSet } = applyConfigSetEdit(this.#config, method, params);
+        this.#config = config;
+        if (method === "config.renameSet") return ok({ config });
+        const res: Record<string, unknown> = {
+          summary: this.#summary,
+          stats: this.#baseline,
+          config,
+        };
+        if (createdSet != null) res["createdSet"] = createdSet;
+        return ok(res);
+      }
+
+      case "config.customMods":
+        return ok({ blocks: this.#customMods });
+
+      case "config.validateMods":
+        return ok({ lines: mockValidateMods(String(params["text"] ?? "")) });
+
+      case "config.addCustomMod":
+      case "config.setCustomMod":
+      case "config.deleteCustomMod": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        const { blocks, addedBlock } = applyCustomModEdit(this.#customMods, method, params);
+        this.#customMods = blocks;
+        const res: Record<string, unknown> = {
+          summary: this.#summary,
+          stats: this.#baseline,
+          config: this.#config,
+          customMods: { blocks },
+        };
+        if (addedBlock != null) res["addedBlock"] = addedBlock;
+        return ok(res);
+      }
+
+      case "config.schema":
+        return ok({ sections: mockConfigSchema() });
+
+      case "config.state":
+        return ok(this.#config);
+
+      case "config.set": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        const values = (params["values"] ?? {}) as Record<string, string | number | boolean>;
+        const clear = (params["clear"] ?? []) as string[];
+        const next = { ...this.#config.values, ...values };
+        for (const v of clear) delete next[v];
+        this.#config = { ...this.#config, values: next };
+        return ok({ summary: this.#summary, stats: this.#baseline, config: this.#config });
+      }
+
+      // A comparison costs a full recalculation in the real engine, so the
+      // mock charges the same — the debounce and the "one at a time" chain in
+      // the session only get exercised if this is slow enough to overlap.
+      case "stats.compare": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        const change = params["change"] as Record<string, unknown> | undefined;
+        if (!change || typeof change["kind"] !== "string") {
+          return fail(-32602, "stats.compare needs a change object");
+        }
+        // Reject exactly what the engine rejects. A mock that accepts a
+        // malformed change lets a client ship code that only fails against the
+        // real sidecar — which is the one place it is expensive to find out.
+        const kind = change["kind"] as string;
+        const needs: Record<string, string[]> = {
+          item: ["slot"],
+          gem: ["group", "gem", "gemId"],
+          gemEnabled: ["group", "gem"],
+          gemQuality: ["group", "gem", "value"],
+          gemLevel: ["group", "gem", "value"],
+          gemCount: ["group", "gem", "value"],
+          config: ["var"],
+        };
+        const required = needs[kind];
+        if (!required) return fail(-32602, `cannot compare a change of kind ${kind}`);
+        for (const field of required) {
+          if (change[field] === undefined) {
+            return fail(-32602, `a ${kind} comparison needs ${field}`);
+          }
+        }
+        if (kind === "config" && change["value"] === undefined && change["clear"] !== true) {
+          return fail(-32602, "a config comparison needs a value, or clear");
+        }
+        if (kind === "item") {
+          const slot = this.#items.slots.find((s) => s.name === change["slot"]);
+          if (!slot) return fail(-32602, `no such slot: ${change["slot"]}`);
+          const wanted = change["item"];
+          if (wanted !== undefined && wanted !== false
+            && !this.#items.items.some((i) => i.id === wanted)) {
+            return fail(-32602, `no such item: ${wanted}`);
+          }
+          // Replacing an item with itself is a no-op — except for a flask,
+          // which toggles. Reproducing that here is what lets the UI's
+          // "already equipped" case be exercised without the sidecar.
+          const item = this.#items.items.find((i) => i.id === wanted);
+          if (item && slot.itemId === item.id && item.type !== "Flask") {
+            return ok({ stats: [] });
+          }
+        }
+        // Stable per change, so re-hovering the same row is not a new answer.
+        const seed = [...JSON.stringify(change)].reduce((a, c) => a + c.charCodeAt(0), 0);
+        return ok({ stats: mockStatDeltas(seed) });
+      }
+
+      case "items.list":
+        return ok(this.#items);
+
+      case "items.slotsFor": {
+        const item = this.#items.items.find((i) => i.id === params["item"]);
+        if (!item) return fail(-32602, `no such item: ${params["item"]}`);
+        // A crude stand-in for PoB's `IsItemValidForSlot`. It only has to be
+        // *no more permissive* than the engine — the real rules (quiver needs a
+        // bow, wand pairs with wand) are answered by the sidecar, and a mock
+        // that allowed more would let a bad UI through.
+        const slots = this.#items.slots
+          .filter((s) => s.shown && !s.nodeId)
+          .filter((s) => {
+            if (item.type === "Jewel") return false;
+            if (item.type === "Flask") return s.name.startsWith("Flask");
+            if (item.type === "Ring") return s.name.startsWith("Ring");
+            return s.name === item.type || s.label === item.type;
+          })
+          .map((s) => s.name);
+        return ok({ slots });
+      }
+
+      case "items.modSources": {
+        const item = this.#items.items.find((i) => i.id === params["item"]);
+        if (!item) return fail(-32602, `no such item: ${params["item"]}`);
+        return ok({ sources: mockModSources(item) });
+      }
+
+      case "items.modPool": {
+        const item = this.#items.items.find((i) => i.id === params["item"]);
+        if (!item) return fail(-32602, `no such item: ${params["item"]}`);
+        const source = params["source"] as string;
+        if (!mockModSources(item).some((s) => s.id === source)) {
+          return fail(-32602, `no such mod source: ${source}`);
+        }
+        const mods = mockModPool(item, source, params["search"] as string | undefined);
+        return ok({ mods, total: mods.length });
+      }
+
+
+      case "items.paste":
+      case "items.equip":
+      case "items.delete":
+      case "items.setModRange":
+      case "items.setVariant":
+      case "items.newSet":
+      case "items.activateSet":
+      case "items.renameSet":
+      case "items.deleteSet":
+      case "items.addMod":
+      case "items.removeMod":
+      case "items.optimiseSockets":
+      case "items.setWeaponSwap": {
+        // Reject exactly what the engine rejects. A mock that is easier than
+        // the sidecar is how a client ships code that only fails against the
+        // real thing — it has already happened twice on this project.
+        if (method === "items.paste") {
+          const text = params["text"];
+          if (typeof text !== "string" || !text.trim()) {
+            return fail(-32602, "items.paste needs the item text");
+          }
+          if (!/^\s*Rarity:/i.test(text)) {
+            return fail(-32602, "that does not look like an item");
+          }
+        }
+        if (method === "items.equip") {
+          const slot = this.#items.slots.find((s) => s.name === params["slot"]);
+          if (!slot) return fail(-32602, `no such slot: ${params["slot"]}`);
+          const wanted = params["item"];
+          if (wanted !== false && wanted != null) {
+            const item = this.#items.items.find((i) => i.id === wanted);
+            if (!item) return fail(-32602, `cannot equip unknown item: ${wanted}`);
+            const legal = slot.name === item.type
+              || (item.type === "Flask" && slot.name.startsWith("Flask"))
+              || (item.type === "Ring" && slot.name.startsWith("Ring"))
+              || (item.type === "Jewel" && slot.nodeId != null);
+            if (!legal) {
+              return fail(-32602, `${item.title ?? item.name} cannot go in ${slot.name}`);
+            }
+          }
+        }
+        if (method === "items.delete" || method === "items.setModRange" || method === "items.setVariant") {
+          if (!this.#items.items.some((i) => i.id === params["item"])) {
+            return fail(-32602, `no such item: ${params["item"]}`);
+          }
+        }
+        if (method === "items.activateSet" || method === "items.renameSet" || method === "items.deleteSet") {
+          if (!this.#items.sets.some((s) => s.id === params["id"])) {
+            return fail(-32602, `no such item set: ${params["id"]}`);
+          }
+          if (method === "items.deleteSet" && this.#items.sets.length <= 1) {
+            return fail(-32602, "a build must keep at least one item set");
+          }
+        }
+        if (method === "items.setWeaponSwap" && typeof params["enabled"] !== "boolean") {
+          return fail(-32602, "enabled must be true or false");
+        }
+        if (method === "items.addMod") {
+          const item = this.#items.items.find((i) => i.id === params["item"]);
+          if (!item) return fail(-32602, `no such item: ${params["item"]}`);
+          if (params["source"] === "CUSTOM") {
+            const text = params["text"];
+            if (typeof text !== "string" || !text.trim()) {
+              return fail(-32602, "a custom modifier needs some text");
+            }
+          } else {
+            const pool = mockModPool(item, params["source"] as string);
+            if (!pool.some((m) => m.index === params["index"])) {
+              return fail(-32602, `no modifier ${params["index"]} in ${params["source"]}`);
+            }
+          }
+        }
+        if (method === "items.removeMod") {
+          const item = this.#items.items.find((i) => i.id === params["item"]);
+          const list = item?.mods?.[params["list"] as keyof NonNullable<Item["mods"]>];
+          if (!list?.some((m) => m.index === params["index"])) {
+            return fail(-32602, `no such modifier ${params["index"]}`);
+          }
+        }
+        if (method === "items.optimiseSockets") {
+          const slot = this.#items.slots.find((s) => s.name === params["slot"]);
+          if (!slot) return fail(-32602, `no such slot: ${params["slot"]}`);
+          const worn = this.#items.items.find((i) => i.id === slot.itemId);
+          if (!worn) return fail(-32602, `nothing is equipped in ${slot.name}`);
+          // The engine refuses a base with no sockets at all, and so must this.
+          if (!worn.sockets || worn.sockets.length === 0) {
+            return fail(-32602, `${worn.title ?? worn.baseName} has no sockets`);
+          }
+        }
+
+        await this.#sleep(this.#ms(REAL.recompute));
+        const next = applyItemEdit(this.#items, method, params);
+        const { createdSet, ...state } = next;
+        this.#items = state;
+        return ok({
+          summary: this.#summary,
+          stats: this.#baseline,
+          items: this.#items,
+          ...(createdSet !== undefined ? { createdSet } : {}),
+          // Optimising re-resolves the socket groups, so the engine answers
+          // with those too.
+          ...(method === "items.optimiseSockets" ? { skills: this.#skills } : {}),
+        });
+      }
+
+      case "build.setMainSkill": {
+        await this.#sleep(this.#ms(REAL.recompute));
+        this.#mainSkill = applyMainSkill(this.#mainSkill, params);
+        // Both slices read `build.mainSocketGroup` in the engine, so they
+        // cannot disagree there; the mock has to keep them in step by hand or
+        // a skill-set switch remembers the wrong group.
+        this.#skills = { ...this.#skills, mainGroup: this.#mainSkill.groupIndex };
+        return ok({
+          summary: this.#summary,
+          stats: this.#baseline,
+          mainSkill: this.#mainSkill,
+        });
+      }
 
       case "build.save":
         await this.#sleep(this.#ms(40));

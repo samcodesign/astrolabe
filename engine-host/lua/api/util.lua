@@ -149,6 +149,17 @@ function M.plain(text)
 	return (text:gsub("%^%d", ""):gsub("%^x%x%x%x%x%x%x", ""))
 end
 
+--- JSON has no infinity and no NaN. PoB produces both — an unmitigated hit
+--- taken from an immune enemy is `inf`, and a ratio of two zeroes is NaN — so
+--- they are encoded as the strings JavaScript parses back, and NaN is dropped
+--- rather than sent as a value nothing can compare.
+function M.jsonNumber(v)
+	if v == math.huge then return "Infinity" end
+	if v == -math.huge then return "-Infinity" end
+	if v ~= v then return nil end
+	return v
+end
+
 --- Copy of Build.lua's local `matchFlags`, which decides whether a display stat
 --- applies to the current skill. It is not exported, so it has to be mirrored.
 function M.matchFlags(reqFlags, notFlags, flags)

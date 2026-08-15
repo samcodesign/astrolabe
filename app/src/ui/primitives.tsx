@@ -6,6 +6,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -180,6 +181,97 @@ export function Modal({
         {footer && <div className="modal__foot">{footer}</div>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Ask a yes/no question.
+ *
+ * Deliberately not `window.confirm`: a native dialog in a desktop app renders
+ * as browser chrome, cannot be styled, and blocks the webview thread. This is
+ * the same `Modal` everything else uses.
+ */
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = "Delete",
+  danger,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      title={title}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <p>{message}</p>
+    </Modal>
+  );
+}
+
+/** Ask for a single line of text. Enter commits, Escape cancels. */
+export function PromptDialog({
+  title,
+  label,
+  initial = "",
+  commitLabel = "Save",
+  onCommit,
+  onCancel,
+}: {
+  title: string;
+  label: string;
+  initial?: string;
+  commitLabel?: string;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const commit = () => {
+    if (value.trim()) onCommit(value.trim());
+  };
+  return (
+    <Modal
+      title={title}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={!value.trim()} onClick={commit}>
+            {commitLabel}
+          </Button>
+        </>
+      }
+    >
+      <Field label={label}>
+        <Input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+          }}
+        />
+      </Field>
+    </Modal>
   );
 }
 

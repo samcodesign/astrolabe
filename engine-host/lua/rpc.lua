@@ -23,14 +23,20 @@ local A, O  = util.array, util.object
 -- asset dimensions, which the headless image stubs report as 1x1.
 require("api.images").install()
 
-local buildApi = require("api.build")
-local statsApi = require("api.stats")
-local treeApi  = require("api.tree")
-local powerApi = require("api.power")
-local specApi  = require("api.spec")
+local buildApi  = require("api.build")
+local statsApi  = require("api.stats")
+local treeApi   = require("api.tree")
+local powerApi  = require("api.power")
+local specApi   = require("api.spec")
+local skillsApi = require("api.skills")
+local configApi = require("api.config")
+local compareApi = require("api.compare")
+local itemsApi  = require("api.items")
+local modsApi   = require("api.mods")
 
 local methods = { }
-for _, module in ipairs({ buildApi, statsApi, treeApi, powerApi, specApi }) do
+for _, module in ipairs({ buildApi, statsApi, treeApi, powerApi, specApi, skillsApi,
+                         configApi, compareApi, itemsApi, modsApi }) do
 	for name, fn in pairs(module.methods) do
 		methods[name] = fn
 	end

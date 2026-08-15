@@ -1,51 +1,144 @@
 /* ==========================================================================
-   PoE Planner — visual system
+   Astrolabe — visual system
 
-   Three rules drive everything here:
-     1. The stat panel is what users stare at. It gets the most contrast, the
-        most vertical rhythm, and tabular figures so digits line up in a column.
-     2. Dark, but not black-on-grey mush. Surfaces step up in luminance as they
-        come forward; borders are the quiet separator, never a box around
-        everything.
-     3. Generous spacing. Density is not information.
+   Four rules drive everything here:
+
+     1. **Colour is data, and Path of Building owns it.** The semantic palette
+        below is transcribed from `PathOfBuilding/src/Data/Global.lua:7` — the
+        same table the engine colours its own output with. A resistance, a gem
+        name and an item rarity are the exact colour a PoE player already
+        recognises, because they are literally PoB's values. Anything invented
+        here is marked as such and justified.
+
+     2. **The neutrals are warm.** Path of Exile's world is leather, stone and
+        tarnished metal. A slate with a blue cast is the tell that a theme came
+        from a dashboard, which is what this used to be.
+
+     3. **The numbers are the display type.** Not the headings. Figures are set
+        in a mono face with tabular figures, sized and coloured to be read
+        first; labels drop back to quiet small text.
+
+     4. **Density is legibility, here.** This file used to say the opposite.
+        For a stat panel scanned a hundred times an hour it was wrong, and PoB
+        — dense, tabular, unglamorous — was right.
    ========================================================================== */
 
+/* Bundled, not assumed: the app ships to machines that have none of these.
+   All OFL. Alegreya is the closest open analogue to PoE's own Fontin — both
+   humanist, both faintly calligraphic, both cut to hold up at small sizes.
+   JetBrains Mono is also the base of a widely used Nerd Font build, so icon
+   glyphs can be dropped in later without a metric change. */
+@import "@fontsource/alegreya/500.css";
+@import "@fontsource/alegreya/600.css";
+@import "@fontsource/alegreya-sans/400.css";
+@import "@fontsource/alegreya-sans/500.css";
+@import "@fontsource/alegreya-sans/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
 :root {
-  /* surfaces, back to front */
-  --bg: #0b0d11;
-  --surface-1: #101319;
-  --surface-2: #161a23;
-  --surface-3: #1d222d;
-  --surface-hover: #232937;
+  /* ---- surfaces, back to front. Warm greys, not blue slate. ------------ */
+  --bg: #0a0908;
+  --surface-1: #141210;
+  --surface-2: #1c1917;
+  --surface-3: #262220;
+  --surface-hover: #2f2926;
 
-  --border: #242a36;
-  --border-strong: #333b4c;
+  --border: #302a25;
+  --border-strong: #443b33;
 
-  --text: #e9ecf3;
-  --text-2: #a4adc0;
-  --text-3: #6d7789;
+  /* `--text` is PoB's NORMAL lifted slightly for body use; `--text` proper is
+     the emphasis tone. Both warm, to sit on the stone above. */
+  --text: #e8e2d6;
+  --text-2: #b3aa9c;
+  --text-3: #8a8073;
+  --text-4: #5e564c;
 
-  --accent: #8b7cff;
-  --accent-soft: #8b7cff26;
-  --accent-line: #8b7cff59;
+  /* ---- accent ----------------------------------------------------------
+     PoB UNIQUE. The single most recognisable colour in the game, and the one
+     the old purple (#8b7cff) was standing in for without belonging to
+     anything. */
+  --accent: #af6025;
+  --accent-lit: #d4823e;
+  --accent-soft: #af602522;
+  --accent-line: #af602559;
   --gold: #e2bd80;
-  --good: #56d68d;
-  --good-soft: #56d68d1f;
-  --bad: #f4787d;
-  --bad-soft: #f4787d1f;
-  --warn: #eab464;
 
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
+  /* ==== PoB's palette, transcribed ======================================
+     Source: PathOfBuilding/src/Data/Global.lua:7. Keep in step with it; the
+     engine sends these same values inline on stat rows and gem names, so a
+     divergence here shows up as two shades of "life red" on one screen.
+     ---------------------------------------------------------------------- */
 
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-2: 0 8px 24px -8px rgb(0 0 0 / 0.55);
-  --shadow-3: 0 24px 64px -16px rgb(0 0 0 / 0.7);
+  /* item rarity */
+  --rarity-normal: #c8c8c8;
+  --rarity-magic: #8888ff;
+  --rarity-rare: #ffff77;
+  --rarity-unique: #af6025;
+  --rarity-relic: #60c060;
+  --rarity-gem: #1aa29b;
+  --rarity-currency: #aa9e82;
+  --rarity-crafted: #b8daf1;
+  --rarity-fractured: #a29160;
+  --rarity-shaper: #55bbff;
+  --rarity-elder: #aa77cc;
 
-  --font: "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui,
+  /* damage types */
+  --dmg-phys: #c8c8c8;
+  --dmg-fire: #b97123;
+  --dmg-cold: #3f6db3;
+  --dmg-lightning: #adaa47;
+  --dmg-chaos: #d02090;
+
+  /* attributes, and the pools PoB aliases to them */
+  --attr-str: #e05030;
+  --attr-dex: #70ff70;
+  --attr-int: #7070ff;
+  --pool-life: #e05030;
+  --pool-mana: #7070ff;
+  --pool-es: #88ffff;
+  --pool-ward: #ffff77;
+  --pool-armour: #c8c8c8;
+  --pool-evasion: #33ff77;
+  --pool-rage: #ff9922;
+
+  --offence: #e07030;
+  --defence: #8080e0;
+
+  /* ---- semantic --------------------------------------------------------
+     PoB's POSITIVE is #33FF77 and holds fine on this ground. Its NEGATIVE,
+     #DD0022, does not: PoB draws it on a mid-grey panel and it lands near
+     3.2:1 on ours. Hue kept, luminance lifted. `--bad-exact` stays for the
+     places that must match PoB pixel-for-pixel. */
+  --good: #33ff77;
+  --good-soft: #33ff771f;
+  --bad: #ff4d5e;
+  --bad-soft: #ff4d5e1f;
+  --bad-exact: #dd0022;
+  --warn: #ff9922;
+  --disabled: #7f7f7f;
+  --unsupported: #f05050;
+
+  /* ---- form ------------------------------------------------------------
+     Tighter radii. The 10px default read as a web card; PoE's own panels are
+     close to square. */
+  --radius-sm: 3px;
+  --radius: 5px;
+  --radius-lg: 8px;
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-2: 0 8px 24px -8px rgb(0 0 0 / 0.65);
+  --shadow-3: 0 24px 64px -16px rgb(0 0 0 / 0.8);
+
+  /* ---- type ------------------------------------------------------------
+     Two families. `--font-display` is used with restraint — the build name,
+     panel titles — and everything operational is the sans. Figures are always
+     the mono, which is what makes a column of numbers read as a column. */
+  --font-display: "Alegreya", "Palatino Linotype", Georgia, serif;
+  --font: "Alegreya Sans", "Segoe UI Variable Text", "Segoe UI", system-ui,
     -apple-system, sans-serif;
-  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace,
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace,
     monospace;
 
   --header-h: 60px;
@@ -68,7 +161,10 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 14px;
+  /* Alegreya Sans has a smaller x-height than Inter at the same nominal size,
+     so every px value tuned against Inter now reads a step small. One bump
+     here rather than touching a hundred component rules. */
+  font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -115,7 +211,7 @@ button {
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #43506a;
+  background: #574c42;
   background-clip: content-box;
 }
 
@@ -151,7 +247,7 @@ button {
 }
 .btn:hover:not(:disabled) {
   background: var(--surface-hover);
-  border-color: #3d4659;
+  border-color: var(--border-strong);
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px);
@@ -161,14 +257,14 @@ button {
   cursor: not-allowed;
 }
 .btn--primary {
-  background: linear-gradient(180deg, #9587ff, #7466f0);
-  border-color: #9c90ff;
-  color: #fff;
+  background: linear-gradient(180deg, var(--accent-lit), var(--accent));
+  border-color: var(--accent-lit);
+  color: #1a0f06;
   box-shadow: var(--shadow-1);
 }
 .btn--primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #a196ff, #7f72f5);
-  border-color: #aba0ff;
+  background: linear-gradient(180deg, #e0954f, var(--accent-lit));
+  border-color: #e0954f;
 }
 .btn--ghost {
   background: transparent;
@@ -238,7 +334,7 @@ button {
 .input:hover,
 .textarea:hover,
 .select:hover {
-  border-color: #3d4659;
+  border-color: var(--border-strong);
 }
 .input:focus,
 .textarea:focus,
@@ -329,19 +425,19 @@ button {
   line-height: 1.5;
 }
 .banner--error {
-  border-color: #6b2f37;
-  background: #2a1519;
-  color: #ffc9cc;
+  border-color: #6b2f33;
+  background: #26120f;
+  color: #ffc9c3;
 }
 .banner--warn {
-  border-color: #6a5527;
-  background: #241d10;
-  color: #f3d9a6;
+  border-color: #6a4f22;
+  background: #241a0c;
+  color: #f3d3a0;
 }
 .banner--success {
-  border-color: #2c5f42;
-  background: #12241a;
-  color: #b6efcf;
+  border-color: #2c5f3e;
+  background: #101f16;
+  color: #aef0c6;
 }
 .banner__body {
   flex: 1;
@@ -375,16 +471,16 @@ button {
 .pill--accent {
   background: var(--accent-soft);
   border-color: var(--accent-line);
-  color: #bdb2ff;
+  color: var(--accent-lit);
 }
 .pill--good {
   background: var(--good-soft);
-  border-color: #56d68d40;
+  border-color: #33ff7740;
   color: var(--good);
 }
 .pill--bad {
   background: var(--bad-soft);
-  border-color: #f4787d40;
+  border-color: #ff4d5e40;
   color: var(--bad);
 }
 
@@ -401,7 +497,7 @@ button {
 }
 .dot--busy {
   background: var(--gold);
-  box-shadow: 0 0 0 3px #e2bd8022;
+  box-shadow: 0 0 0 3px var(--accent-soft);
   animation: pulse 1.4s ease-in-out infinite;
 }
 .dot--dead {
@@ -427,7 +523,7 @@ button {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(900px 520px at 50% -10%, #1b1a3a 0%, transparent 70%),
+    radial-gradient(900px 520px at 50% -10%, #2a1a0e 0%, transparent 70%),
     var(--bg);
   padding: 40px;
 }
@@ -443,7 +539,7 @@ button {
   width: 76px;
   height: 76px;
   border-radius: 20px;
-  background: linear-gradient(150deg, #262b45, #14161f);
+  background: linear-gradient(150deg, #33261c, #16120f);
   border: 1px solid var(--border-strong);
   display: grid;
   place-items: center;
@@ -457,9 +553,9 @@ button {
   border-radius: 50%;
   background: var(--gold);
   box-shadow:
-    0 0 0 6px #0e1017,
+    0 0 0 6px #100c09,
     0 0 0 8px var(--accent),
-    0 0 28px 4px #8b7cff66;
+    0 0 28px 4px #af602566;
 }
 .splash__title {
   font-size: 25px;
@@ -541,7 +637,7 @@ button {
   font-size: 11.5px;
   line-height: 1.7;
   color: var(--text-3);
-  background: #090b0f;
+  background: #080706;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
@@ -562,7 +658,7 @@ button {
   width: 100%;
   height: 6px;
   border-radius: 999px;
-  background: #090b0f;
+  background: #080706;
   border: 1px solid var(--border);
   overflow: hidden;
 }
@@ -581,7 +677,7 @@ button {
   height: 100%;
   overflow: auto;
   background:
-    radial-gradient(1100px 600px at 50% -20%, #191a33 0%, transparent 65%),
+    radial-gradient(1100px 600px at 50% -20%, #241608 0%, transparent 65%),
     var(--bg);
 }
 .import__inner {
@@ -634,7 +730,7 @@ button {
 }
 .route[aria-pressed="true"] {
   border-color: var(--accent);
-  background: linear-gradient(180deg, #1d1b33, var(--surface-2));
+  background: linear-gradient(180deg, #2a1c10, var(--surface-2));
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .route__name {
@@ -739,6 +835,7 @@ button {
   font-size: 13.5px;
 }
 .char-row__meta {
+  font-family: var(--font-mono);
   margin-left: auto;
   font-size: 12px;
   color: var(--text-3);
@@ -805,6 +902,7 @@ button {
   font-weight: 600;
 }
 .stat-chip__value {
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -886,6 +984,16 @@ button {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* `TreeStage` reuses this class for its own root, so this rule dresses two
+     nested elements: the shell's stage column (a grid item, where `flex` is
+     inert) and the tree's own wrapper (a flex item, where it is load-bearing).
+     Without `flex: 1` the inner one is `flex: 0 1 auto` and sizes to its
+     content — but its content is a canvas whose height the renderer sets from
+     the host's height, so the two defined each other in a circle. It held only
+     because the canvas was never measured at zero. Hiding the tree behind a tab
+     did exactly that: one resize at 0 wrote a sub-pixel canvas height, the
+     wrapper collapsed to it, and nothing could grow back. */
+  flex: 1;
   /* A flex/grid item defaults to `min-height: auto`, meaning it refuses to
      shrink below its content. The tree canvas is `flex: 1`, so without this the
      two size each other upwards and the stage overflows the window — 2170px
@@ -894,6 +1002,680 @@ button {
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--bg);
+}
+
+/* --- skills and gems ---------------------------------------------------- */
+
+.skills {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.skills[aria-busy="true"] .skills__body {
+  opacity: 0.75;
+}
+.skills__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  flex: 0 0 auto;
+}
+.skills__sets {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.skills__sets-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.skills__sets .select {
+  width: 170px;
+}
+.skills__count {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-right: auto;
+}
+.skills__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.skills__note {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.skills--empty {
+  padding: 24px 20px;
+}
+
+.socket-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.socket-group--main {
+  border-color: var(--accent);
+}
+.socket-group--off {
+  opacity: 0.55;
+}
+.socket-group__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.socket-group__enable {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.socket-group__label {
+  flex: 1;
+  min-width: 120px;
+}
+.socket-group__main-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.socket-group__inert {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--warn);
+  cursor: help;
+}
+.socket-group__slot {
+  width: 130px;
+}
+.socket-group__repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.socket-group__repeat .input {
+  width: 54px;
+  height: 28px;
+  padding: 0 6px;
+}
+.socket-group__fulldps {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.socket-group__from-item {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-style: italic;
+}
+.socket-group__gems {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px 12px;
+  gap: 4px;
+}
+
+.gem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  min-height: 25px;
+  border-radius: var(--radius-sm);
+}
+.gem:hover {
+  background: var(--surface-2);
+}
+.gem--off .gem__name {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+.gem input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* The socket the gem wants. These used to be three invented hexes; they are
+   PoB's attribute colours, which is what the game uses. A "!" means the item's
+   socket at this position is a different colour. */
+.gem__socket {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #000;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px #00000066;
+}
+.gem__socket--R { background: var(--attr-str); }
+.gem__socket--G { background: var(--attr-dex); }
+.gem__socket--B { background: var(--attr-int); }
+.gem__socket--none { background: transparent; border: 1px dashed var(--border-strong); }
+/* The pip cannot carry the "!" at 9px, so a mismatched socket says so beside
+   the name instead. */
+.gem__mismatch {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warn);
+  flex: 0 0 auto;
+}
+
+/* In PoE and in PoB the gem *name* carries the attribute colour
+   (`SkillsTab.lua:1186-1192`) — it is how you read a link setup without
+   reading it. The colour is applied inline from the engine's own value; these
+   rules only set weight and size. Supports drop a step so the active skill in
+   a six-link is findable at a glance. */
+.gem__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gem__name--support {
+  font-size: 12.5px;
+  opacity: 0.82;
+}
+.gem__num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+/* Six gems times three fields is eighteen bordered boxes fighting the names.
+   The chrome only appears on hover and focus; the field is still a real input
+   and still commits on blur. */
+.gem__numbox {
+  width: 34px;
+  padding: 1px 3px;
+  height: 20px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  background: transparent;
+  border-color: transparent;
+}
+.gem__numbox:hover:not(:disabled),
+.gem__numbox:focus {
+  background: var(--bg);
+  border-color: var(--border-strong);
+}
+.gem__numbox:disabled {
+  color: var(--text-3);
+}
+/* An active skill sitting at maximum quality is worth seeing without reading
+   the digits. */
+.gem__num--maxq .gem__numbox {
+  color: var(--rarity-rare);
+}
+/* Icon-only reorder and delete. `btn--sm` is 30px and was setting the row
+   height on its own — these carry a single glyph and do not need it. */
+.gem__actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.gem__actions .btn {
+  height: 21px;
+  min-width: 21px;
+  padding: 0 5px;
+  font-size: 11px;
+  opacity: 0;
+}
+.gem:hover .gem__actions .btn,
+.gem__actions .btn:focus-visible {
+  opacity: 1;
+}
+/* Never hide a control from a pointer that is already on it. */
+.gem__actions:hover .btn {
+  opacity: 1;
+}
+.gem__globals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  flex-basis: 100%;
+  padding: 2px 0 4px 20px;
+}
+.gem__global {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.gem {
+  flex-wrap: wrap;
+}
+.gem__req {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.gem--error .gem__name {
+  color: var(--bad);
+}
+.gem__error {
+  font-size: 11.5px;
+  color: var(--bad);
+}
+
+.gempick {
+  position: relative;
+  width: 210px;
+  flex: 0 0 auto;
+}
+.gempick--compact {
+  width: 120px;
+}
+.gempick .input {
+  width: 100%;
+  height: 28px;
+}
+.gempick__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 3px);
+  left: 0;
+  min-width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+}
+.gempick__item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.gempick__item:hover {
+  background: var(--surface-hover);
+}
+.gempick__name--support {
+  color: var(--text-2);
+  font-style: italic;
+}
+.gempick__tags {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* --- configuration ------------------------------------------------------ */
+
+.config {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.config[aria-busy="true"] .config__body {
+  opacity: 0.75;
+}
+.config__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  flex: 0 0 auto;
+}
+.config__sets {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.config__sets-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.config__sets .select {
+  width: 170px;
+}
+.config__search {
+  max-width: 280px;
+  margin-left: 8px;
+}
+.config__count {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.config__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.config__section-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 12px;
+}
+.config__section--quest {
+  padding: 16px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.config__section--quest .banner {
+  margin-bottom: 14px;
+}
+.config__options {
+  display: grid;
+  /* Two columns where there is room, one when there is not. Config rows are
+     short and a single column wastes most of the tab on wide windows. */
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 8px 28px;
+}
+/* A rail on the leading edge carries the row's state.
+   This is ours, not PoB's — PoB tints the label. A 3px edge marker survives
+   peripheral vision, so "which of these thousand options have I touched" is
+   answerable by scanning the gutter rather than reading colour into text. */
+.config__row {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 0 11px;
+  min-height: 26px;
+  padding-right: 4px;
+  border-radius: var(--radius-sm);
+}
+.config__row:hover {
+  background: var(--surface-2);
+}
+.config__row::before {
+  content: "";
+  align-self: stretch;
+  border-radius: 2px;
+  background: transparent;
+}
+.config__row-label {
+  font-size: 13px;
+  color: var(--text-3);
+}
+/* Found by search but not applicable to this build. Shown, because "it does
+   not apply to you" is the answer to looking for it — but not as if it were
+   live. */
+.config__row--inactive {
+  opacity: 0.45;
+}
+/* Set, and no longer applicable — still moving the numbers. This is the one
+   state that must be loud: a stale toggle is invisible by nature. */
+.config__row--invalid .config__row-label {
+  color: var(--bad);
+}
+.config__row--invalid::before {
+  background: var(--bad);
+}
+/* Set to something other than its default: the rows that are actually doing
+   something to your numbers. */
+.config__row--modified::before {
+  background: var(--accent);
+}
+.config__row--modified .config__row-label {
+  color: var(--text);
+}
+.config__stale {
+  font-size: 11px;
+}
+/* Changed away from the default. PoB draws a blue border for the same reason:
+   so you can see at a glance what you have touched. */
+.config__row--modified .config__row-label {
+  color: var(--text);
+}
+.config__row--modified .input,
+.config__row--modified .select {
+  border-color: var(--accent-line);
+}
+/* Chrome on hover and focus only, as with the gem fields. A config tab is a
+   thousand rows; a thousand bordered boxes is a wall. */
+.config__input,
+.config__row .select {
+  width: 100%;
+  height: 22px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-align: right;
+  background: transparent;
+  border-color: transparent;
+  padding: 0 6px;
+}
+.config__row .select { text-align: left; }
+.config__input:hover,
+.config__input:focus,
+.config__row .select:hover,
+.config__row .select:focus {
+  background: var(--bg);
+  border-color: var(--border-strong);
+}
+/* The placeholder is not a hint about what to type — it is the value the
+   calculator is *actually using* while the box is empty
+   (`ConfigTab.lua:1090-1092`). Italic so it can never be mistaken for one you
+   set, and present rather than absent so the number is at least visible. */
+.config__input::placeholder {
+  color: var(--text-4);
+  font-style: italic;
+  opacity: 1;
+}
+.config__check {
+  justify-self: end;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.config__note {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.config--empty {
+  padding: 24px 20px;
+}
+
+/* --- custom modifiers --------------------------------------------------- */
+
+.custommods__intro {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin: -4px 0 12px;
+}
+.custommods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+.custommod {
+  width: 100%;
+  max-width: 720px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  padding: 10px 12px 12px;
+}
+.custommod--off {
+  opacity: 0.55;
+}
+.custommod__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.custommod__head input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.custommod__title {
+  flex: 1;
+  height: 30px;
+}
+.custommod__count {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.custommod__bad {
+  color: var(--bad);
+}
+.custommod__text {
+  min-height: 0;
+  font-size: 12.5px;
+}
+.custommod__dirty {
+  font-size: 11.5px;
+  color: var(--warn);
+  margin-top: 6px;
+}
+/* The lines the engine could not use. PoB colours these in the box and only
+   while it is unfocused, which hides them exactly when you are typing. */
+.custommod__errors {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.custommod__errors li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.custommod__line {
+  font-family: var(--font-mono);
+  color: var(--bad);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.custommod__errors code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.custommod__why {
+  color: var(--text-3);
+}
+
+/* --- build sections ----------------------------------------------------- */
+
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  flex: 0 0 auto;
+}
+.tabbar__tab {
+  position: relative;
+  height: 38px;
+  padding: 0 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+.tabbar__tab:hover {
+  color: var(--text);
+}
+.tabbar__tab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 550;
+}
+/* The underline is a pseudo-element so switching tabs cannot shift the row:
+   a border would add height to the selected tab only. */
+.tabbar__tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* Panels stay mounted and are hidden by an inline `display: none`, so the
+   selected one has to re-establish the column that `.stage` used to provide
+   directly — `TreeStage`'s canvas is `flex: 1` and needs a flex parent with a
+   zero min-height to size against. */
+.tabpanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* --- tree variants ------------------------------------------------------ */
@@ -952,6 +1734,7 @@ button {
   font-weight: 550;
 }
 .spec-tab__points {
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
@@ -1072,6 +1855,7 @@ button {
   margin-bottom: 3px;
 }
 .tree-stub__facts dd {
+  font-family: var(--font-mono);
   margin: 0;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
@@ -1108,6 +1892,7 @@ button {
   transition: width 180ms ease;
 }
 .heatbar__count {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
   font-size: 12px;
@@ -1134,6 +1919,7 @@ button {
   background: var(--surface-2);
 }
 .heat-row__rank {
+  font-family: var(--font-mono);
   color: var(--text-3);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -1145,14 +1931,16 @@ button {
   text-overflow: ellipsis;
 }
 .heat-row__cost {
+  font-family: var(--font-mono);
   color: var(--text-3);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .heat-row__value {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-  color: var(--gold);
+  color: var(--accent-lit);
   min-width: 76px;
   text-align: right;
 }
@@ -1161,9 +1949,64 @@ button {
    stat panel — the thing users stare at
    ========================================================================== */
 
+/* The shared sidebar: skill selector on top, stats filling the rest. Both are
+   outside the tab panels, so they stay put while the main view changes. */
+.side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.mainskill {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 20px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.mainskill[aria-busy="true"] {
+  /* The selection is still the truth while the stats catch up; dim the whole
+     block rather than blanking it, so switching skills does not flash. */
+  opacity: 0.75;
+}
+.mainskill__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.mainskill__row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.mainskill__row-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.mainskill__count {
+  width: 84px;
+}
+.mainskill__none {
+  font-size: 12.5px;
+  color: var(--text-3);
+  font-style: italic;
+}
+.mainskill--empty {
+  gap: 4px;
+}
+
 .stats {
   display: flex;
   flex-direction: column;
+  /* Was the whole right-hand column; now it shares it with the skill selector
+     and takes what is left. */
+  flex: 1;
   min-height: 0;
   background: var(--surface-1);
 }
@@ -1204,7 +2047,7 @@ button {
   border: 1px solid var(--accent-line);
 }
 .stats__compare-note b {
-  color: #c3b9ff;
+  color: var(--accent-lit);
   font-weight: 600;
 }
 
@@ -1235,9 +2078,10 @@ button {
   text-overflow: ellipsis;
 }
 .hero__value {
-  font-size: 25px;
-  font-weight: 640;
-  letter-spacing: -0.02em;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
   white-space: nowrap;
@@ -1252,6 +2096,7 @@ button {
   text-overflow: ellipsis;
 }
 .hero__delta {
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1270,19 +2115,29 @@ button {
 .stats__scroll--pending {
   opacity: 0.55;
 }
+/* A label with a rule running off it, rather than a stacked uppercase block
+   above a bordered slab. Costs a third of the vertical space and reads as a
+   divider instead of a heading, which is what it actually is. */
 .group {
-  padding: 14px 0 6px;
-}
-.group + .group {
-  border-top: 1px solid var(--border);
+  padding: 0 0 4px;
 }
 .group__title {
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--text-3);
-  padding: 0 12px 8px;
+  color: var(--text-4);
+  padding: 14px 12px 6px;
+  white-space: nowrap;
+}
+.group__title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 /* The row is a 3-column grid so labels, values and deltas each form a clean
@@ -1291,10 +2146,10 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 12px;
-  padding: 7px 12px;
+  gap: 14px;
+  padding: 2px 12px;
   border-radius: var(--radius-sm);
-  min-height: 32px;
+  min-height: 24px;
 }
 .srow--compare {
   grid-template-columns: minmax(0, 1fr) auto 96px;
@@ -1304,31 +2159,35 @@ button {
 }
 .srow__label {
   font-size: 13px;
-  color: var(--text-2);
+  color: var(--text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The figures are the display type: mono, tabular, and carrying PoB's own
+   colour for the stat (applied inline from `DisplayStat.colour`). Uncoloured
+   rows fall back to `--text`, which is the emphasis tone — so a stat with a
+   colour and one without are both brighter than their label. */
 .srow__value {
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
   text-align: right;
   white-space: nowrap;
-}
-.srow__value--gold {
-  color: var(--gold);
+  color: var(--text);
 }
 .srow__overcap {
-  color: var(--text-3);
-  font-weight: 500;
-  font-size: 12px;
-  margin-left: 4px;
+  color: var(--text-4);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 5px;
 }
 .srow__delta {
+  font-family: var(--font-mono);
   text-align: right;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1365,7 +2224,7 @@ button {
 .overlay {
   position: fixed;
   inset: 0;
-  background: #05070ad9;
+  background: #05040399;
   display: grid;
   place-items: center;
   padding: 40px;
@@ -1418,7 +2277,7 @@ button {
   font-size: 11.5px;
   line-height: 1.7;
   color: var(--text-2);
-  background: #090b0f;
+  background: #080706;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
@@ -1437,6 +2296,7 @@ button {
   color: var(--text-3);
 }
 .kv dd {
+  font-family: var(--font-mono);
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -1455,4 +2315,753 @@ button {
     opacity: 0;
     transform: translate(-50%, 10px);
   }
+}
+
+/* --------------------------------------------------------------------------
+   Hover stat comparison
+
+   Portalled to `body`, so it sits above the scrolling panels it hangs off but
+   below the modal overlay (50) and the toasts (60) — a tip must never cover a
+   dialog the user has to answer.
+   -------------------------------------------------------------------------- */
+.cmptip {
+  position: fixed;
+  z-index: 40;
+  width: min(320px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  /* The pointer is on the control, not on this. Letting it take hits would
+     make the tip flicker as it appears under the cursor. */
+  pointer-events: none;
+  animation: fade 120ms ease;
+}
+.cmptip__head {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.cmptip__sub {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.cmptip__none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.cmptip__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.cmptip__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.cmptip__delta {
+  font-family: var(--font-mono);
+  /* Tabular so the signs and magnitudes line up down the column. */
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  justify-self: end;
+}
+.cmptip__row--good .cmptip__delta,
+.cmptip__row--good .cmptip__pct {
+  color: var(--good);
+}
+.cmptip__row--bad .cmptip__delta,
+.cmptip__row--bad .cmptip__pct {
+  color: var(--bad);
+}
+.cmptip__label {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmptip__pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tip wraps its control. `contents` means it generates no box at all, so
+   a checkbox inside a flex row stays a direct flex item and nothing shifts.
+   (`CompareTip` measures its child rather than itself because of this.) */
+.cmptip-host {
+  display: contents;
+}
+.gem__numlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ==========================================================================
+   items
+
+   Every colour here is a token from the block at the top of this file, which
+   is PoB's own table. Rarity is not decoration in Path of Exile — it is how a
+   player identifies an item before reading a word of it.
+   ========================================================================== */
+
+.rarity--normal { color: var(--rarity-normal); }
+.rarity--magic { color: var(--rarity-magic); }
+.rarity--rare { color: var(--rarity-rare); }
+.rarity--unique { color: var(--rarity-unique); }
+.rarity--relic { color: var(--rarity-relic); }
+
+.items {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.items--empty {
+  padding: 40px;
+}
+.items__note {
+  color: var(--text-3);
+  font-size: 13.5px;
+  padding: 12px 2px;
+}
+
+.items__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.items__sets {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.items__sets-label,
+.items__swap {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.items__sets .select {
+  width: auto;
+  min-width: 150px;
+  height: 30px;
+}
+.items__swap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+/* Two columns: the gear, and whatever is selected. */
+.items__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 0;
+}
+.items__slots {
+  overflow-y: auto;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.items__detail {
+  overflow-y: auto;
+  padding: 16px 20px 40px;
+}
+
+/* --- a slot row --------------------------------------------------------- */
+
+.slot {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 5px 9px;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+.slot:hover {
+  background: var(--surface-2);
+}
+.slot--on {
+  background: var(--surface-2);
+  border-color: var(--accent-line);
+}
+.slot__name {
+  font-size: 11.5px;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slot__swap {
+  color: var(--accent);
+}
+.slot--empty .slot__name {
+  color: var(--text-4);
+}
+.slot__vacant {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.isum {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.isum__name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.isum__corrupt {
+  color: var(--bad);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+/* --- sockets and links --------------------------------------------------
+   Linked sockets are drawn joined, because the link structure is the thing
+   that decides whether a six-link is a six-link. */
+
+.socks {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.socks__cell {
+  display: inline-flex;
+  align-items: center;
+}
+.socks__link {
+  width: 4px;
+  height: 2px;
+  background: var(--border-strong);
+}
+.socks__pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #00000066;
+}
+.socks__pip--R { background: var(--attr-str); }
+.socks__pip--G { background: var(--attr-dex); }
+.socks__pip--B { background: var(--attr-int); }
+/* PoB colours a white socket with the Scion tone and an abyssal one grey
+   (`ItemsTab.lua:4356-4360`). Both are real and neither is a "?" — a white
+   socket takes any gem, an abyssal one takes only an abyss jewel. */
+.socks__pip--W { background: #fff0f0; }
+.socks__pip--A {
+  background: #b0b0b0;
+  border-radius: 2px;
+}
+.socks__pip--none {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+/* --- jewel sockets ------------------------------------------------------
+   One slot per allocated socket node; a real build has dozens. The filled
+   ones are listed, the rest hide behind a count. */
+
+.jewels {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.jewels__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 2px 9px 6px;
+}
+.jewels__title {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-4);
+}
+.jewels__count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-4);
+}
+
+/* --- the item itself ----------------------------------------------------- */
+
+.itip {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* The frame takes the rarity's hue, as the game's item frames do. */
+.itip.rarity--unique { border-color: #af602566; }
+.itip.rarity--rare { border-color: #ffff7740; }
+.itip.rarity--magic { border-color: #8888ff40; }
+
+.itip__head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: center;
+}
+.itip__name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: inherit;
+}
+.itip__base {
+  font-size: 13px;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.itip__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.itip__flag {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rarity-shaper);
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  padding: 1px 8px;
+}
+.itip__flag--bad {
+  color: var(--bad);
+  border-color: #ff4d5e40;
+}
+
+.itip__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  justify-content: center;
+  margin: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.itip__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.itip__stat dt {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.itip__stat-v {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.itip__stat-v--armour { color: var(--pool-armour); }
+.itip__stat-v--evasion { color: var(--pool-evasion); }
+.itip__stat-v--es { color: var(--pool-es); }
+.itip__stat-v--ward { color: var(--pool-ward); }
+
+.itip__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--text-4);
+}
+.itip__sockets {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.itip__mods {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.itip__mods-label {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-4);
+  margin-bottom: 2px;
+}
+.itip__mod {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--rarity-magic);
+  text-align: center;
+  white-space: pre-wrap;
+}
+/* PoB's own mod-source colours. */
+.itip__mods--implicit .itip__mod,
+.itip__mods--enchant .itip__mod {
+  color: var(--rarity-magic);
+  opacity: 0.85;
+}
+.itip__mods--buff .itip__mod { color: var(--rarity-gem); }
+.itip__mods--crucible .itip__mod { color: var(--warn); }
+.itip__mods--scourge .itip__mod { color: #ff6e25; }
+.itip__mod--crafted { color: var(--rarity-crafted); }
+.itip__mod--fractured { color: var(--rarity-fractured); }
+/* Read but not modelled, so it is not in your numbers. Saying nothing would
+   let a user believe it counts. */
+.itip__mod--unsupported {
+  color: var(--text-4);
+  text-decoration: underline dotted var(--text-4);
+  text-underline-offset: 3px;
+}
+
+/* --- the editor ---------------------------------------------------------- */
+
+.iedit {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+.iedit__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.iedit__slot {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+.iedit__pick {
+  flex: 1;
+  height: 30px;
+}
+.iedit__checking {
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.iedit__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.iedit__section-name {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-4);
+  margin: 0;
+}
+.iedit__variant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iedit__variant-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-4);
+  width: 12px;
+}
+.iedit__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.roll {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 46px;
+  align-items: center;
+  gap: 10px;
+}
+.roll__line {
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.roll__slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.roll__value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+
+.items__paste {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.items__paste-error {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--bad);
+}
+.modal--wide {
+  width: min(560px, 100%);
+}
+
+/* The equip list. A list rather than a `<select>` so each candidate can carry
+   its own hover comparison — a native `<option>` cannot be hovered. */
+.iedit__options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.iopt {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 4px 10px;
+  min-height: 26px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.iopt:hover {
+  background: var(--surface-2);
+}
+.iopt--on {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.iopt__empty {
+  font-size: 12.5px;
+  color: var(--text-4);
+  font-style: italic;
+}
+
+/* The item a socket group sits in, shown beside the group. Over-socketed means
+   gems that silently do nothing, which is worth marking. */
+.socket-group__sockets {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+}
+.socket-group__sockets--over {
+  background: var(--bad-soft);
+  box-shadow: inset 0 0 0 1px #ff4d5e40;
+}
+
+/* An imbued support: a slot-wide support that occupies no socket. Crafted-blue,
+   as PoB labels it (`SkillsTab.lua:295`). */
+.imbued {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 6px;
+}
+.imbued__label {
+  font-size: 11px;
+  color: var(--rarity-crafted);
+  white-space: nowrap;
+}
+.imbued__pick {
+  width: auto;
+  min-width: 190px;
+  height: 22px;
+  font-size: 12px;
+}
+
+/* --- the mod browser / crafting bench ------------------------------------
+   One list for all nine of PoB's crafting sources. The Supported column is
+   the point: a mod that reads fine and does nothing is invisible otherwise. */
+.modbrowse {
+  width: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modbrowse__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.modbrowse__source {
+  width: auto;
+  min-width: 160px;
+  height: 30px;
+  margin-left: auto;
+}
+.modbrowse__tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.modbrowse__search {
+  flex: 1;
+  height: 30px;
+}
+.modbrowse__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.modbrowse__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+.modbrowse__warn { color: var(--warn); }
+
+.modbrowse__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.modbrowse__empty {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-4);
+  text-align: center;
+}
+.modrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 11px;
+  min-height: 28px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.modrow:hover { background: var(--surface-2); }
+.modrow__lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.modrow__line {
+  font-size: 12.5px;
+  color: var(--rarity-magic);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modrow__affix {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.modrow__support {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--good);
+  white-space: nowrap;
+}
+/* Not an error — the mod is real, the engine just does not model it. Dimmed
+   rather than red, and still selectable, because PoB lets you add it too. */
+.modrow--unsupported .modrow__line {
+  color: var(--text-3);
+  text-decoration: underline dotted var(--text-4);
+  text-underline-offset: 3px;
+}
+.modrow--unsupported .modrow__support { color: var(--warn); }
+
+.addedmod {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.addedmod__line {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--rarity-crafted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

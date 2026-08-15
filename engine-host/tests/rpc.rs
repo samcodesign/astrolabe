@@ -378,6 +378,700 @@ fn build_setters_change_the_character() {
     );
 }
 
+/// The stat panel reports one skill, and this is what says which.
+///
+/// The load-bearing assertion is that switching socket group *moves the DPS*.
+/// A projection that merely lists the groups would pass a shape check while
+/// leaving `build.mainSocketGroup` untouched, and the panel would keep
+/// reporting the old skill under a new label.
+#[test]
+fn main_skill_selection_picks_which_skill_the_stats_describe() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let sel = h.call("skills.mainSelection", json!({}));
+    assert_eq!(sel["empty"], json!(false), "an imported character has gems");
+    let groups = sel["groups"].as_array().expect("groups is an array");
+    assert!(
+        groups.len() > 1,
+        "the sample character needs several socket groups to switch between, got {}",
+        groups.len()
+    );
+    for (i, g) in groups.iter().enumerate() {
+        assert_eq!(g["index"], json!(i + 1), "group indices are 1-based and dense");
+        assert!(
+            g["label"].as_str().is_some_and(|s| !s.is_empty()),
+            "every group needs a label to be pickable: {g}"
+        );
+        assert!(
+            !g["label"].as_str().unwrap().contains('^'),
+            "labels must have PoB's colour codes stripped: {g}"
+        );
+    }
+    assert!(sel["skill"]["options"].as_array().is_some_and(|o| !o.is_empty()));
+
+    // Walk every group and keep the stats each one reports. At least two must
+    // differ, or the setter is not actually changing what is being calculated.
+    //
+    // The whole stat set is compared rather than one key, because which keys
+    // exist is itself skill-dependent — an aura group has no damage stats at
+    // all, so naming one would only test the groups that happen to have it.
+    let mut seen = Vec::new();
+    for g in groups {
+        let index = g["index"].as_i64().unwrap();
+        let res = h.call("build.setMainSkill", json!({ "group": index }));
+        assert_eq!(
+            res["mainSkill"]["groupIndex"],
+            json!(index),
+            "the setter must report back the group it selected"
+        );
+        seen.push(res["stats"].clone());
+    }
+    assert!(
+        seen.windows(2).any(|w| w[0] != w[1]),
+        "switching socket group changed no stat in any of the {} groups, so \
+         build.mainSocketGroup is not reaching the engine",
+        seen.len()
+    );
+
+    // The projection ships with the setter's own response, because changing the
+    // skill changes which controls exist at all.
+    let back = h.call("build.setMainSkill", json!({ "group": 1 }));
+    assert_eq!(back["mainSkill"], h.call("skills.mainSelection", json!({})));
+
+    // Indices are validated against the live lists rather than trusted.
+    assert_eq!(h.call_err("build.setMainSkill", json!({ "group": 0 }))["code"], json!(-32602));
+    assert_eq!(
+        h.call_err("build.setMainSkill", json!({ "group": 9999 }))["code"],
+        json!(-32602)
+    );
+    assert_eq!(h.call_err("build.setMainSkill", json!({ "skill": 9999 }))["code"], json!(-32602));
+
+    // A build with no gems is a real state, not a failure: PoB shows a
+    // placeholder rather than an error (Build.lua:1557-1564).
+    h.call("build.load", json!({ "empty": true }));
+    let bare = h.call("skills.mainSelection", json!({}));
+    assert_eq!(bare["empty"], json!(true));
+    assert_eq!(bare["groups"], json!([]));
+    assert!(bare["skill"].is_null(), "nothing to choose between: {bare}");
+    assert_eq!(
+        h.call_err("build.setMainSkill", json!({ "group": 1 }))["code"],
+        json!(-32602),
+        "selecting a group in a build that has none is a bad request, not a crash"
+    );
+}
+
+/// Socket groups and gems — visible at last, and editable.
+///
+/// The load-bearing assertion is that adding a support gem raises the DPS of
+/// the skill it supports. A projection that merely listed gems would pass a
+/// shape check while writing into a `gemList` nothing ever re-reads.
+#[test]
+fn gems_can_be_read_and_edited() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let skills = h.call("skills.list", json!({}));
+    let groups = skills["groups"].as_array().expect("groups is an array");
+    assert!(!groups.is_empty(), "an imported character has socket groups");
+    assert!(
+        groups.iter().any(|g| !g["gems"].as_array().unwrap().is_empty()),
+        "every socket group came back empty, so gemList is not being read"
+    );
+
+    // A resolved gem carries what the engine worked out, not just what was typed.
+    let resolved = groups
+        .iter()
+        .flat_map(|g| g["gems"].as_array().unwrap())
+        .find(|gem| gem["name"].is_string())
+        .expect("at least one gem must resolve");
+    assert!(resolved["level"].as_i64().unwrap() >= 1);
+    assert!(resolved["maxLevel"].as_i64().is_some());
+    assert!(
+        matches!(resolved["colour"].as_str(), Some("R" | "G" | "B")),
+        "a resolved gem needs a socket colour: {resolved}"
+    );
+
+    let catalogue = h.call("skills.gemCatalogue", json!({}));
+    let gems = catalogue["gems"].as_array().unwrap();
+    assert!(gems.len() > 300, "expected the full gem list, got {}", gems.len());
+
+    // Filtered as PoB filters it (`GemSelectControl.lua:105-135`). Offering a
+    // gem PoB never shows anyone is a dead end the user cannot diagnose.
+    assert!(
+        gems.iter().all(|g| g["legacy"] == json!(false)),
+        "legacy gems are hidden by default"
+    );
+    let with_legacy = h.call("skills.gemCatalogue", json!({ "showLegacy": true }));
+    assert!(
+        with_legacy["gems"].as_array().unwrap().len() > gems.len(),
+        "showLegacy must actually widen the list"
+    );
+    assert!(
+        gems.iter().any(|g| g["exceptional"] == json!(true)),
+        "the catalogue must mark exceptional/awakened gems so they can be filtered"
+    );
+    assert!(
+        gems.windows(2).all(|w| w[0]["name"].as_str() <= w[1]["name"].as_str()),
+        "the catalogue must be sorted; `data.gems` iteration order is not stable"
+    );
+    let find = |name: &str| {
+        gems.iter()
+            .find(|g| g["name"] == json!(name))
+            .unwrap_or_else(|| panic!("{name} missing from the catalogue"))
+    };
+    assert_eq!(find("Fireball")["support"], json!(false));
+    // Note the name: `data.gems` stores most support gems *without* the
+    // " Support" suffix the game shows ("Added Lightning Damage", not "Added
+    // Lightning Damage Support"). Only ones that collide with an active skill
+    // keep it, e.g. "Barrage Support". `support` is the reliable signal, not
+    // the name — and this is PoB's own picker behaviour, so it is what to match.
+    let added_damage = find("Added Lightning Damage");
+    assert_eq!(added_damage["support"], json!(true));
+
+    // Build a group from nothing: an active skill, then a support for it.
+    let created = h.call("skills.addGroup", json!({ "label": "test group" }));
+    let gi = created["addedGroup"].as_i64().unwrap();
+    let fireball = find("Fireball")["id"].clone();
+
+    let with_skill = h.call("skills.setGem", json!({ "group": gi, "gem": 1, "gemId": fireball }));
+    let group = &with_skill["skills"]["groups"][(gi - 1) as usize];
+    assert_eq!(group["label"], json!("test group"));
+    assert_eq!(group["gems"][0]["name"], json!("Fireball"));
+    assert!(
+        group["gems"][0]["level"].as_i64().unwrap() > 1,
+        "a new gem takes its natural level, not 1: {}",
+        group["gems"][0]
+    );
+
+    // Point the stats at it, then support it and watch the damage move.
+    h.call("build.setMainSkill", json!({ "group": gi }));
+    let before = stat(&h.call("stats.get", json!({}))["stats"], "TotalDPS");
+    let supported = h.call(
+        "skills.setGem",
+        json!({ "group": gi, "gem": 2, "gemId": added_damage["id"].clone() }),
+    );
+    assert_eq!(supported["skills"]["groups"][(gi - 1) as usize]["gems"][1]["support"], json!(true));
+    assert!(
+        stat(&supported["stats"], "TotalDPS") > before,
+        "Added Lightning Damage must raise Fireball's hit DPS: {before} unchanged"
+    );
+
+    // Disabling the support puts it back.
+    let disabled = h.call("skills.setGem", json!({ "group": gi, "gem": 2, "enabled": false }));
+    assert_eq!(stat(&disabled["stats"], "TotalDPS"), before);
+
+    // Level and quality reach the calculator too.
+    let levelled = h.call("skills.setGem", json!({ "group": gi, "gem": 1, "level": 1 }));
+    assert!(
+        stat(&levelled["stats"], "TotalDPS") < before,
+        "a level 1 Fireball must do less damage than a natural-level one"
+    );
+
+    // Deleting a gem renumbers the rest.
+    let deleted = h.call("skills.deleteGem", json!({ "group": gi, "gem": 1 }));
+    let after = &deleted["skills"]["groups"][(gi - 1) as usize];
+    assert_eq!(after["gems"].as_array().unwrap().len(), 1);
+    assert_eq!(after["gems"][0]["support"], json!(true), "the support is all that is left");
+
+    // Deleting a group below the main-skill pointer must not silently repoint
+    // the stat panel at a different skill.
+    h.call("build.setMainSkill", json!({ "group": gi }));
+    let removed = h.call("skills.deleteGroup", json!({ "group": 1 }));
+    assert_eq!(
+        removed["skills"]["groups"].as_array().unwrap().len(),
+        groups.len(),
+        "one added, one removed"
+    );
+    assert_eq!(
+        removed["mainSkill"]["groupIndex"].as_i64().unwrap(),
+        gi - 1,
+        "the main-skill pointer must follow its group when an earlier one goes"
+    );
+
+    // Bad input is rejected rather than corrupting the list.
+    assert_eq!(h.call_err("skills.setGem", json!({ "group": 9999, "gem": 1 }))["code"], json!(-32602));
+    assert_eq!(
+        h.call_err("skills.setGem", json!({ "group": 1, "gem": 99, "gemId": "x" }))["code"],
+        json!(-32602)
+    );
+    assert_eq!(
+        h.call_err("skills.setGem", json!({ "group": 1, "gem": 1, "gemId": "not-a-gem" }))["code"],
+        json!(-32602)
+    );
+    assert_eq!(h.call_err("skills.deleteGem", json!({ "group": 1, "gem": 0 }))["code"], json!(-32602));
+}
+
+/// The config options, and the two that are a live correctness bug.
+///
+/// Bandit and pantheon can only be imported over OAuth, so a character brought
+/// in any other way silently keeps whatever the build already had — worth two
+/// passive points and a chunk of defences. The assertion that matters is that
+/// switching bandit to Oak *changes the numbers*, because that is the proof the
+/// value reached the calculator rather than just the input table.
+#[test]
+fn config_options_are_exposed_and_change_the_build() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let schema = h.call("config.schema", json!({}));
+    let sections = schema["sections"].as_array().expect("sections is an array");
+    assert!(sections.len() >= 6, "PoB groups options into 7 sections, got {}", sections.len());
+
+    // Every option must be renderable from the schema alone: a type the client
+    // knows, a label, and — for a dropdown — the values it accepts.
+    let known = ["check", "count", "integer", "countAllowZero", "float", "list", "text"];
+    let mut total = 0;
+    for section in sections {
+        assert!(section["name"].as_str().is_some_and(|s| !s.is_empty()));
+        for opt in section["options"].as_array().unwrap() {
+            total += 1;
+            let ty = opt["type"].as_str().unwrap_or("");
+            assert!(known.contains(&ty), "unrenderable option type {ty:?} in {opt}");
+            assert!(opt["var"].as_str().is_some_and(|s| !s.is_empty()), "{opt}");
+            assert!(opt["label"].as_str().is_some_and(|s| !s.is_empty()), "{opt}");
+            assert!(
+                !opt["label"].as_str().unwrap().contains('^'),
+                "colour codes must be stripped: {opt}"
+            );
+            if ty == "list" {
+                assert!(
+                    opt["list"].as_array().is_some_and(|l| !l.is_empty()),
+                    "a list option with no options: {opt}"
+                );
+            }
+        }
+    }
+    assert!(total > 500, "expected ~1000 config options, got {total}");
+
+    // Visibility is decided here, not in the client, and it is a real filter:
+    // most options do not apply to any one build.
+    let state = h.call("config.state", json!({}));
+    let shown = state["shown"].as_object().expect("shown is a map");
+    assert!(!shown.is_empty(), "nothing at all is applicable, which cannot be right");
+    assert!(
+        shown.len() < total,
+        "every one of {total} options claims to apply; the predicates are not being evaluated"
+    );
+
+    // Bandit is always applicable — it is not conditional on anything.
+    assert!(shown.contains_key("bandit"), "bandit must always be offered");
+    assert!(shown.contains_key("pantheonMajorGod"));
+    assert!(shown.contains_key("pantheonMinorGod"));
+
+    // Kraityn is the bandit whose reward this particular character can show:
+    // `MovementSpeed INC 8` (CalcSetup.lua:552-553) lands in a stat the panel
+    // already reports. Oak's `Life BASE 40` would be invisible here, because
+    // the sample build is Chaos Inoculation and its life is pinned to 1.
+    let before = stat(&h.call("stats.get", json!({}))["stats"], "EffectiveMovementSpeedMod");
+    let kraityn = h.call("config.set", json!({ "values": { "bandit": "Kraityn" } }));
+    assert_eq!(kraityn["config"]["values"]["bandit"], json!("Kraityn"));
+    assert!(
+        stat(&kraityn["stats"], "EffectiveMovementSpeedMod") > before,
+        "helping Kraityn grants 8% increased movement speed, so the stat must rise \
+         — the value reached the input table but not the calculator"
+    );
+
+    // Killing them all instead grants a passive point, which the *other* branch
+    // of the same code path adds (`ExtraPoints`, CalcSetup.lua:556-557).
+    let points = h.call("build.summary", json!({}))["pointsTotal"].as_i64().unwrap();
+    let killed = h.call("config.set", json!({ "values": { "bandit": "None" } }));
+    assert_eq!(killed["config"]["values"]["bandit"], json!("None"));
+    assert_eq!(
+        killed["summary"]["pointsTotal"].as_i64().unwrap(),
+        points + 1,
+        "killing all the bandits is worth a passive point"
+    );
+
+    let major = h.call("config.set", json!({ "values": { "pantheonMajorGod": "TheBrineKing" } }));
+    assert_eq!(major["config"]["values"]["pantheonMajorGod"], json!("TheBrineKing"));
+
+    // Several at once, so importing quest choices costs one recalculation.
+    let both = h.call(
+        "config.set",
+        json!({ "values": { "bandit": "Alira", "pantheonMinorGod": "Yugul" } }),
+    );
+    assert_eq!(both["config"]["values"]["bandit"], json!("Alira"));
+    assert_eq!(both["config"]["values"]["pantheonMinorGod"], json!("Yugul"));
+
+    // Clearing is distinct from setting the default: it means "never touched".
+    let cleared = h.call("config.set", json!({ "clear": ["bandit"] }));
+    assert!(
+        cleared["config"]["values"]["bandit"].is_null(),
+        "a cleared option must be absent, not defaulted"
+    );
+
+    // Values are validated against the declared list rather than trusted.
+    assert_eq!(
+        h.call_err("config.set", json!({ "values": { "bandit": "Bob" } }))["code"],
+        json!(-32602)
+    );
+    assert_eq!(
+        h.call_err("config.set", json!({ "values": { "nonsenseVar": 1 } }))["code"],
+        json!(-32602)
+    );
+    assert_eq!(
+        h.call_err("config.set", json!({ "values": { "bandit": 7 } }))["code"],
+        json!(-32602),
+        "a number is not one of bandit's options"
+    );
+    assert_eq!(h.call_err("config.set", json!({}))["code"], json!(-32602));
+}
+
+/// Custom modifiers: arbitrary mod text, and — the part PoB does not do — a
+/// per-line account of what did and did not take.
+///
+/// `BuildModList` drops unparseable lines in silence (`ConfigTab.lua:1106-1129`)
+/// and the only feedback in PoB is the colour of the text. The report here is
+/// ours, so it needs pinning: a typo, a partially-understood mod and a
+/// recognised-but-unsupported mod are three different answers.
+#[test]
+fn custom_modifiers_apply_and_report_bad_lines() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let start = h.call("config.customMods", json!({}));
+    assert_eq!(
+        start["blocks"].as_array().unwrap().len(),
+        1,
+        "a build always keeps at least one block"
+    );
+
+    // A mod the engine understands must move the numbers.
+    let before = stat(&h.call("stats.get", json!({}))["stats"], "Str");
+    let applied = h.call(
+        "config.setCustomMod",
+        json!({ "index": 1, "text": "+100 to Strength" }),
+    );
+    assert!(
+        stat(&applied["stats"], "Str") > before,
+        "a parsed custom mod must reach the calculator"
+    );
+    let block = &applied["customMods"]["blocks"][0];
+    assert_eq!(block["lines"].as_array().unwrap().len(), 1);
+    assert_eq!(block["lines"][0]["ok"], json!(true));
+
+    // Disabling it puts the numbers back, without losing the text.
+    let off = h.call("config.setCustomMod", json!({ "index": 1, "enabled": false }));
+    assert_eq!(stat(&off["stats"], "Str"), before);
+    assert_eq!(off["customMods"]["blocks"][0]["text"], json!("+100 to Strength"));
+    h.call("config.setCustomMod", json!({ "index": 1, "enabled": true }));
+
+    // The per-line report: good lines, blank lines and a typo together.
+    let mixed = h.call(
+        "config.setCustomMod",
+        json!({ "index": 1, "text": "+100 to Strength\n\nnot a real modifier at all\n+10 to Dexterity" }),
+    );
+    let lines = mixed["customMods"]["blocks"][0]["lines"].as_array().unwrap();
+    assert_eq!(
+        lines.len(),
+        3,
+        "blank lines must not be reported as errors — every paragraph break \
+         would look broken: {lines:?}"
+    );
+    assert_eq!(lines[0]["ok"], json!(true));
+    assert_eq!(lines[1]["ok"], json!(false));
+    assert!(
+        lines[1]["reason"].as_str().is_some(),
+        "a failed line must say why: {}",
+        lines[1]
+    );
+    assert_eq!(lines[2]["ok"], json!(true));
+    // Line numbers must be the user's, counting the blank one.
+    assert_eq!(lines[0]["line"], json!(1));
+    assert_eq!(lines[1]["line"], json!(3));
+    assert_eq!(lines[2]["line"], json!(4));
+
+    // Validation without committing, for feedback while typing.
+    let dry = h.call("config.validateMods", json!({ "text": "+5 to all Attributes\ngibberish" }));
+    let dry_lines = dry["lines"].as_array().unwrap();
+    assert_eq!(dry_lines.len(), 2);
+    assert_eq!(dry_lines[0]["ok"], json!(true));
+    assert_eq!(dry_lines[1]["ok"], json!(false));
+    // It must not have changed anything.
+    assert_eq!(
+        h.call("config.customMods", json!({}))["blocks"][0]["text"],
+        mixed["customMods"]["blocks"][0]["text"]
+    );
+
+    // Several named groups, independently toggleable.
+    let added = h.call("config.addCustomMod", json!({ "title": "bossing only" }));
+    assert_eq!(added["addedBlock"], json!(2));
+    assert_eq!(added["customMods"]["blocks"][1]["title"], json!("bossing only"));
+    assert_eq!(added["customMods"]["blocks"][1]["enabled"], json!(true));
+
+    let deleted = h.call("config.deleteCustomMod", json!({ "index": 2 }));
+    assert_eq!(deleted["customMods"]["blocks"].as_array().unwrap().len(), 1);
+
+    // Deleting the last one re-seeds, rather than leaving nothing to type into.
+    let emptied = h.call("config.deleteCustomMod", json!({ "index": 1 }));
+    assert_eq!(emptied["customMods"]["blocks"].as_array().unwrap().len(), 1);
+    assert_eq!(emptied["customMods"]["blocks"][0]["text"], json!(""));
+
+    assert_eq!(
+        h.call_err("config.setCustomMod", json!({ "index": 99, "text": "x" }))["code"],
+        json!(-32602)
+    );
+    assert_eq!(h.call_err("config.validateMods", json!({}))["code"], json!(-32602));
+}
+
+/// Skill sets, and the main-skill pointer they can silently corrupt.
+///
+/// Switching sets repoints `socketGroupList` wholesale while
+/// `build.mainSocketGroup` is an index into it. PoB does not fix that at switch
+/// time — it clamps downward inside the next calculation
+/// (`CalcSetup.lua:1483-1489`), destructively. This asserts we clamp at the
+/// switch *and* restore the previous selection on the way back.
+#[test]
+fn skill_sets_switch_without_corrupting_the_main_skill() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let start = h.call("skills.list", json!({}));
+    let first = start["activeSet"].as_i64().unwrap();
+    let groups = start["groups"].as_array().unwrap().len();
+    assert!(groups > 2, "the sample build needs several groups; got {groups}");
+
+    // Point at a high group, then move to a set that has none.
+    h.call("build.setMainSkill", json!({ "group": groups }));
+    let blank = h.call("skills.newSet", json!({ "title": "bossing" }));
+    let second = blank["createdSet"].as_i64().unwrap();
+
+    let switched = h.call("skills.activateSet", json!({ "id": second }));
+    assert_eq!(switched["skills"]["activeSet"].as_i64().unwrap(), second);
+
+    // Not empty: a new set carries none of the user's groups, but the
+    // recalculation re-adds the ones granted by equipped items, which belong to
+    // the gear rather than the loadout.
+    let fresh = switched["skills"]["groups"].as_array().unwrap();
+    assert!(
+        fresh.len() < groups,
+        "a new set must not inherit the old set's socket groups: {} vs {groups}",
+        fresh.len()
+    );
+    assert!(
+        fresh.iter().all(|g| g["fromItem"] == json!(true)),
+        "everything left in a fresh set should be item-granted: {fresh:?}"
+    );
+    assert!(
+        switched["skills"]["mainGroup"].as_i64().unwrap() <= fresh.len().max(1) as i64,
+        "the pointer must be clamped into range, not left dangling past the end"
+    );
+
+    // Back again: the selection must be the one we left, not PoB's clamp.
+    let back = h.call("skills.activateSet", json!({ "id": first }));
+    assert_eq!(
+        back["skills"]["mainGroup"].as_i64().unwrap(),
+        groups as i64,
+        "returning to a set should restore the group it was on"
+    );
+    assert_eq!(back["mainSkill"]["groupIndex"].as_i64().unwrap(), groups as i64);
+
+    // A copy is a deep copy: editing it must not reach the original.
+    let copied = h.call("skills.newSet", json!({ "copyFrom": first }));
+    let third = copied["createdSet"].as_i64().unwrap();
+    h.call("skills.activateSet", json!({ "id": third }));
+    let in_copy = h.call("skills.list", json!({}));
+    assert_eq!(in_copy["groups"].as_array().unwrap().len(), groups);
+
+    let before_gems = in_copy["groups"][0]["gems"].as_array().unwrap().len();
+    assert!(before_gems > 0);
+    h.call("skills.deleteGem", json!({ "group": 1, "gem": 1 }));
+    h.call("skills.activateSet", json!({ "id": first }));
+    assert_eq!(
+        h.call("skills.list", json!({}))["groups"][0]["gems"]
+            .as_array()
+            .unwrap()
+            .len(),
+        before_gems,
+        "deleting a gem in the copy must not touch the original — copyTable is \
+         shallow per level, so the gem tables have to be cloned individually"
+    );
+
+    let renamed = h.call("skills.renameSet", json!({ "id": third, "title": "copy of mapping" }));
+    assert!(renamed["skills"]["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["title"] == json!("copy of mapping")));
+
+    // Deleting the active set must leave a live one selected.
+    h.call("skills.activateSet", json!({ "id": third }));
+    let deleted = h.call("skills.deleteSet", json!({ "id": third }));
+    let sets = deleted["skills"]["sets"].as_array().unwrap();
+    let active = deleted["skills"]["activeSet"].as_i64().unwrap();
+    assert!(sets.iter().any(|s| s["id"].as_i64() == Some(active)));
+
+    assert_eq!(h.call_err("skills.activateSet", json!({ "id": 9999 }))["code"], json!(-32602));
+    h.call("skills.deleteSet", json!({ "id": second }));
+    assert_eq!(
+        h.call_err("skills.deleteSet", json!({ "id": first }))["code"],
+        json!(-32602),
+        "a build must keep at least one skill set"
+    );
+}
+
+/// Placeholders, and the two masks that say whether an option is really live.
+///
+/// This pins the bug the parity audit found. Fourteen options declare a
+/// `defaultPlaceholderState` — melee distance 15, projectile distance 40,
+/// withered stacks 15 — and PoB *calculates with it* when the option is unset
+/// (`ConfigTab.lua:1090-1092`). We were reading `varData.inactiveText`, which
+/// has zero occurrences in `ConfigOptions.lua`, so the field was always empty
+/// and the client rendered a default of `0` as the value. The user read
+/// "Melee distance to enemy: 0" while the engine used 15.
+#[test]
+fn config_placeholders_and_masks_describe_what_the_engine_uses() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let schema = h.call("config.schema", json!({}));
+    let mut by_var = std::collections::HashMap::new();
+    for section in schema["sections"].as_array().unwrap() {
+        for opt in section["options"].as_array().unwrap() {
+            by_var.insert(opt["var"].as_str().unwrap().to_string(), opt.clone());
+        }
+    }
+
+    // The specific options that were lying.
+    for (var, expected) in [("meleeDistance", 15.0), ("projectileDistance", 40.0)] {
+        let opt = by_var.get(var).unwrap_or_else(|| panic!("{var} missing"));
+        assert_eq!(
+            opt["placeholder"].as_f64(),
+            Some(expected),
+            "{var} must report the value the calculator actually uses: {opt}"
+        );
+        // And it must NOT be reported as a default, because an unset numeric is
+        // nil in PoB, not zero — reporting 0 is what produced the false display.
+        assert!(
+            opt["default"].is_null(),
+            "{var} has no declared default; reporting one invites rendering it as a value: {opt}"
+        );
+    }
+
+    let with_placeholders = by_var
+        .values()
+        .filter(|o| !o["placeholder"].is_null())
+        .count();
+    assert!(
+        with_placeholders >= 10,
+        "ConfigOptions declares 14 placeholders; only {with_placeholders} came through"
+    );
+
+    // No numeric option may claim a default of 0 — that is the shape of the bug.
+    for (var, opt) in &by_var {
+        let ty = opt["type"].as_str().unwrap_or("");
+        if matches!(ty, "count" | "integer" | "countAllowZero" | "float") {
+            assert!(
+                opt["default"].as_f64() != Some(0.0),
+                "{var} reports a default of 0; unset numerics are nil in PoB, not zero"
+            );
+        }
+    }
+
+    let state = h.call("config.state", json!({}));
+    assert!(state["placeholders"].is_object(), "state carries live placeholders");
+    assert!(state["invalid"].is_object());
+    assert!(state["modified"].is_object());
+
+    // `modified` tracks "changed away from the default". An imported character
+    // legitimately arrives with some options already set, so test the
+    // transition on one we control rather than global emptiness.
+    assert!(
+        state["modified"]["bandit"].is_null(),
+        "bandit is still on its default after import: {}",
+        state["modified"]
+    );
+    h.call("config.set", json!({ "values": { "bandit": "Kraityn" } }));
+    let after = h.call("config.state", json!({}));
+    assert_eq!(after["modified"]["bandit"], json!(true), "a changed option is flagged");
+
+    // Clearing puts it back to untouched, which is not the same as setting the
+    // default value.
+    let cleared = h.call("config.set", json!({ "clear": ["bandit"] }));
+    assert!(cleared["config"]["modified"]["bandit"].is_null());
+}
+
+/// Config sets: several complete sets of option values, switchable.
+///
+/// The assertion that matters is that switching sets *changes the numbers*.
+/// The values live on the set and `tab.input` is repointed at it
+/// (`ConfigTab.lua:1293`), so a switch that only moved a label would leave the
+/// calculator reading the old table.
+#[test]
+fn config_sets_hold_separate_values() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let start = h.call("config.state", json!({}));
+    assert_eq!(start["sets"].as_array().unwrap().len(), 1, "a build starts with one set");
+    let first = start["activeSet"].as_i64().unwrap();
+
+    h.call("config.set", json!({ "values": { "bandit": "Kraityn" } }));
+    let with_kraityn = stat(&h.call("stats.get", json!({}))["stats"], "EffectiveMovementSpeedMod");
+
+    // A fresh set starts from the declared defaults, not from the current one.
+    let created = h.call("config.newSet", json!({ "title": "bossing" }));
+    let second = created["createdSet"].as_i64().unwrap();
+    assert_ne!(second, first);
+    h.call("config.activateSet", json!({ "id": second }));
+
+    let fresh = h.call("config.state", json!({}));
+    assert_eq!(fresh["activeSet"].as_i64().unwrap(), second);
+    assert_eq!(
+        fresh["values"]["bandit"],
+        json!("None"),
+        "a new set must not inherit the old set's bandit"
+    );
+    assert!(
+        stat(&h.call("stats.get", json!({}))["stats"], "EffectiveMovementSpeedMod")
+            < with_kraityn,
+        "switching sets must reach the calculator, not just the label"
+    );
+
+    // Switching back restores the first set's values.
+    h.call("config.activateSet", json!({ "id": first }));
+    assert_eq!(h.call("config.state", json!({}))["values"]["bandit"], json!("Kraityn"));
+
+    // Copying takes the source's values with it.
+    let copied = h.call("config.newSet", json!({ "copyFrom": first }));
+    let third = copied["createdSet"].as_i64().unwrap();
+    h.call("config.activateSet", json!({ "id": third }));
+    assert_eq!(h.call("config.state", json!({}))["values"]["bandit"], json!("Kraityn"));
+
+    let renamed = h.call("config.renameSet", json!({ "id": third, "title": "copy of mapping" }));
+    let titled = renamed["config"]["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"].as_i64() == Some(third))
+        .unwrap();
+    assert_eq!(titled["title"], json!("copy of mapping"));
+
+    // Deleting the active set must leave a live one selected, not a dangling id.
+    let deleted = h.call("config.deleteSet", json!({ "id": third }));
+    let sets = deleted["config"]["sets"].as_array().unwrap();
+    assert_eq!(sets.len(), 2);
+    let active = deleted["config"]["activeSet"].as_i64().unwrap();
+    assert!(
+        sets.iter().any(|s| s["id"].as_i64() == Some(active)),
+        "the active set must still exist after deleting it"
+    );
+
+    assert_eq!(h.call_err("config.activateSet", json!({ "id": 9999 }))["code"], json!(-32602));
+    assert_eq!(
+        h.call_err("config.renameSet", json!({ "id": first, "title": "  " }))["code"],
+        json!(-32602)
+    );
+    // The last set cannot go.
+    h.call("config.deleteSet", json!({ "id": second }));
+    assert_eq!(
+        h.call_err("config.deleteSet", json!({ "id": first }))["code"],
+        json!(-32602),
+        "a build must keep at least one config set"
+    );
+}
+
 /// PoB's own class ids: `tree.classes` is keyed by these, `classNameMap` maps
 /// names onto them, and `spec.curClassId` holds one (PassiveTree.lua:155-161).
 const BASE_CLASSES: [(i64, &str); 7] = [
@@ -1131,4 +1825,941 @@ fn a_saved_build_reloads_to_identical_stats() {
             "{key} changed when the build was saved and reloaded"
         );
     }
+}
+
+/// Speculative comparisons: "what would this change do?", without doing it.
+///
+/// The load-bearing assertion is not that a delta comes back but that the
+/// build is *unchanged afterwards*. `calcs.initEnv` has no gem-shaped or
+/// config-shaped override key, so unlike the tree comparison these cannot ask
+/// the calculator a hypothetical — they edit the live build, calculate, and
+/// edit it back (`GemSelectControl.lua:59-103`). A restore that misses leaves a
+/// gem the user never chose in their build, and the next save writes it out.
+#[test]
+fn comparisons_predict_a_change_without_making_it() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    // Fingerprint of the whole build, so a restore that misses any field fails.
+    let fingerprint = |h: &mut Host| -> (Value, Value) {
+        (h.call("stats.get", json!({}))["stats"].clone(), h.call("skills.list", json!({})))
+    };
+
+    // Take the fingerprint *after* one calculation, not straight off the load.
+    // `initEnv` regenerates item-granted socket groups and fills in derived
+    // fields on them — `matchesSocket` is nil until the first pass — so a
+    // freshly loaded build and a settled one differ for reasons that have
+    // nothing to do with whether a comparison put things back.
+    h.call(
+        "stats.compare",
+        json!({ "change": { "kind": "config", "var": "bandit", "value": "Alira" } }),
+    );
+    let (baseline, skills_before) = fingerprint(&mut h);
+
+    // --- config: the prediction must equal the real thing ---------------
+    //
+    // Kraityn grants `MovementSpeed INC 8`, which this character can show.
+    let predicted = h.call(
+        "stats.compare",
+        json!({ "change": { "kind": "config", "var": "bandit", "value": "Kraityn" } }),
+    );
+    let moved = predicted["stats"]
+        .as_array()
+        .expect("stats is an array")
+        .iter()
+        .find(|r| r["key"] == json!("EffectiveMovementSpeedMod"))
+        .expect("helping Kraityn must move movement speed");
+    let predicted_delta = moved["delta"].as_f64().unwrap();
+    assert!(predicted_delta > 0.0, "8% increased movement speed is an increase");
+    assert_eq!(moved["better"], json!(true), "more movement speed is better");
+
+    // Nothing may have happened yet.
+    let (stats_now, skills_now) = fingerprint(&mut h);
+    assert_eq!(stats_now, baseline, "a comparison must not change the build");
+    assert_eq!(skills_now, skills_before);
+
+    // Now actually do it, and the panel must move by exactly what was promised.
+    let applied = h.call("config.set", json!({ "values": { "bandit": "Kraityn" } }));
+    let real_delta = stat(&applied["stats"], "EffectiveMovementSpeedMod")
+        - stat(&baseline, "EffectiveMovementSpeedMod");
+    assert!(
+        (real_delta - predicted_delta).abs() < 1e-6,
+        "predicted {predicted_delta} but applying it moved the stat by {real_delta}"
+    );
+    h.call("config.set", json!({ "clear": ["bandit"] }));
+
+    // --- gem enable: the flip, and the flip back ------------------------
+    let group = skills_before["mainGroup"].as_i64().unwrap();
+    let gems = skills_before["groups"][(group - 1) as usize]["gems"].as_array().unwrap();
+    let gem = 1 + gems
+        .iter()
+        .position(|g| g["enabled"] == json!(true))
+        .expect("the main group has an enabled gem") as i64;
+
+    let off = h.call(
+        "stats.compare",
+        json!({ "change": { "kind": "gemEnabled", "group": group, "gem": gem } }),
+    );
+    assert!(
+        !off["stats"].as_array().unwrap().is_empty(),
+        "disabling a gem in the main group must change something"
+    );
+    let (stats_now, skills_now) = fingerprint(&mut h);
+    assert_eq!(stats_now, baseline, "toggling a gem for a peek must be undone");
+    assert_eq!(skills_now, skills_before);
+
+    // --- gem quality ----------------------------------------------------
+    h.call(
+        "stats.compare",
+        json!({ "change": { "kind": "gemQuality", "group": group, "gem": gem, "value": 20 } }),
+    );
+    let (stats_now, skills_now) = fingerprint(&mut h);
+    assert_eq!(stats_now, baseline);
+    assert_eq!(skills_now, skills_before, "quality must be restored exactly");
+
+    // --- swapping in a gem the build does not have ----------------------
+    let catalogue = h.call("skills.gemCatalogue", json!({}));
+    let support = catalogue["gems"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["name"] == json!("Added Cold Damage"))
+        .expect("Added Cold Damage is in the catalogue")["id"]
+        .clone();
+
+    let swapped = h.call(
+        "stats.compare",
+        json!({ "change": { "kind": "gem", "group": group, "gem": gem, "gemId": support } }),
+    );
+    assert!(swapped["stats"].is_array());
+    let (stats_now, skills_now) = fingerprint(&mut h);
+    assert_eq!(stats_now, baseline, "a swapped-in gem must be swapped back out");
+    assert_eq!(
+        skills_now, skills_before,
+        "the gem list must be byte-identical after a speculative swap"
+    );
+
+    // Appending into the empty slot past the end is how the picker asks
+    // "what would adding this be worth?" — and it must leave no gem behind.
+    let slot = gems.len() as i64 + 1;
+    h.call(
+        "stats.compare",
+        json!({ "change": { "kind": "gem", "group": group, "gem": slot, "gemId": support } }),
+    );
+    let (stats_now, skills_now) = fingerprint(&mut h);
+    assert_eq!(stats_now, baseline);
+    assert_eq!(
+        skills_now, skills_before,
+        "a comparison against the empty slot must not add a gem to the build"
+    );
+
+    // --- bad input is rejected, and rejects cleanly ---------------------
+    for bad in [
+        json!({ "kind": "gem", "group": 9999, "gem": 1, "gemId": support }),
+        json!({ "kind": "gem", "group": group, "gem": 1, "gemId": "Metadata/NoSuchGem" }),
+        json!({ "kind": "gemEnabled", "group": group, "gem": 9999 }),
+        json!({ "kind": "config", "var": "notAnOption", "value": true }),
+        json!({ "kind": "nonsense" }),
+    ] {
+        assert_eq!(
+            h.call_err("stats.compare", json!({ "change": bad.clone() }))["code"],
+            json!(-32602),
+            "expected a clean rejection for {bad}"
+        );
+    }
+    let (stats_now, skills_now) = fingerprint(&mut h);
+    assert_eq!(stats_now, baseline, "a rejected comparison must not touch the build");
+    assert_eq!(skills_now, skills_before);
+}
+
+/// Gear: the item pool, the slots, and what may legally go where.
+///
+/// The last part is the reason this talks to PoB rather than reimplementing:
+/// `IsItemValidForSlot` (`ItemsTab.lua:2457-2505`) knows a quiver needs a bow
+/// in the other hand and that two wands pair but a wand and a sceptre do not.
+/// Those rules are not derivable from the item's type alone, so the engine is
+/// asked rather than second-guessed.
+#[test]
+fn items_expose_the_pool_the_slots_and_what_fits_where() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let state = h.call("items.list", json!({}));
+    let items = state["items"].as_array().expect("items is an array");
+    let slots = state["slots"].as_array().expect("slots is an array");
+    assert!(items.len() >= 10, "the sample character is fully geared; got {}", items.len());
+    assert!(slots.len() >= 11, "expected the base slot list; got {}", slots.len());
+    assert!(state["sets"].as_array().is_some_and(|s| !s.is_empty()));
+
+    let by_id: std::collections::HashMap<i64, &Value> =
+        items.iter().map(|i| (i["id"].as_i64().unwrap(), i)).collect();
+
+    let equipped = |name: &str| -> Option<&Value> {
+        slots
+            .iter()
+            .find(|s| s["name"] == json!(name))
+            .and_then(|s| s["itemId"].as_i64())
+            .and_then(|id| by_id.get(&id).copied())
+    };
+
+    // Body armour: a real six-link, read off the socket groups rather than
+    // counted — links are what decide whether a socket group fits.
+    let body = equipped("Body Armour").expect("the sample has a body armour");
+    let sockets = body["sockets"].as_array().expect("body armour has sockets");
+    assert_eq!(sockets.len(), 6);
+    let group = sockets[0]["group"].as_i64().unwrap();
+    assert!(
+        sockets.iter().all(|s| s["group"].as_i64() == Some(group)),
+        "all six sockets are in one link group: {sockets:?}"
+    );
+    assert!(
+        body["defences"]["energyShield"].as_f64().is_some_and(|v| v > 0.0),
+        "an ES body armour must report its energy shield"
+    );
+
+    // Influence is a flag set, not a single value — an item can carry two.
+    let helmet = equipped("Helmet").expect("the sample has a helmet");
+    let influences = helmet["influences"].as_array().expect("Indigon is influenced");
+    assert!(influences.contains(&json!("Shaper")));
+
+    // Mod lines keep PoB's six-way split; the order matters on save.
+    assert!(
+        items.iter().any(|i| i["mods"]["explicit"].as_array().is_some_and(|m| !m.is_empty())),
+        "no item reported an explicit modifier"
+    );
+
+    // Slot legality, delegated. A ring fits three slots and nothing else.
+    let ring = equipped("Ring 1").expect("the sample has a ring");
+    let legal = h.call("items.slotsFor", json!({ "item": ring["id"] }));
+    let legal: Vec<&str> =
+        legal["slots"].as_array().unwrap().iter().map(|s| s.as_str().unwrap()).collect();
+    assert_eq!(legal, vec!["Ring 1", "Ring 2", "Ring 3"]);
+
+    // A one-handed weapon is legal in both hands and both swap sets; a body
+    // armour is legal in exactly one place.
+    let weapon = equipped("Weapon 1").expect("the sample has a weapon");
+    let legal = h.call("items.slotsFor", json!({ "item": weapon["id"] }));
+    let legal = legal["slots"].as_array().unwrap();
+    assert!(legal.contains(&json!("Weapon 1")) && legal.contains(&json!("Weapon 1 Swap")));
+
+    let legal = h.call("items.slotsFor", json!({ "item": body["id"] }));
+    assert_eq!(legal["slots"], json!(["Body Armour"]));
+
+    assert_eq!(
+        h.call_err("items.slotsFor", json!({ "item": 99999 }))["code"],
+        json!(-32602),
+        "an unknown item id is a bad request, not a crash"
+    );
+}
+
+/// Pasting, equipping and item sets — the mutations, end to end.
+///
+/// Goldrim is a good probe because it is unambiguous: one legal slot, and it
+/// replaces an energy-shield helmet with an evasion one, so a correct equip has
+/// to be visible in the stat panel rather than just in the item list.
+#[test]
+fn items_can_be_pasted_equipped_and_organised_into_sets() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let before = stat(&h.call("stats.get", json!({}))["stats"], "EnergyShield");
+    let start = h.call("items.list", json!({}));
+    let count = start["items"].as_array().unwrap().len();
+
+    // Item text exactly as the game puts it on the clipboard. `Item:ParseRaw`
+    // is the only thing that reads this; we never parse an item ourselves.
+    let raw = "Rarity: UNIQUE\nGoldrim\nLeather Cap\nItem Level: 20\nQuality: 20\n\
+               Evasion: 32\nLevelReq: 1\nImplicits: 0\n+35 to Evasion Rating\n\
+               10% increased Rarity of Items found\n+35% to all Elemental Resistances\n";
+    let pasted = h.call("items.paste", json!({ "text": raw }));
+    let items = pasted["items"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), count + 1, "the pasted item should join the pool");
+
+    let goldrim = items
+        .iter()
+        .find(|i| i["title"] == json!("Goldrim"))
+        .expect("Goldrim parsed out of the raw text");
+    let id = goldrim["id"].as_i64().unwrap();
+    assert_eq!(goldrim["rarity"], json!("UNIQUE"));
+    assert_eq!(goldrim["baseName"], json!("Leather Cap"));
+
+    // A helmet fits one slot, and the engine is what says so.
+    assert_eq!(
+        h.call("items.slotsFor", json!({ "item": id }))["slots"],
+        json!(["Helmet"])
+    );
+
+    // Equipping it over an energy-shield helmet must move the numbers.
+    let equipped = h.call("items.equip", json!({ "item": id, "slot": "Helmet" }));
+    let after = stat(&equipped["stats"], "EnergyShield");
+    assert!(
+        after < before,
+        "swapping an ES helmet for an evasion one must lower ES: {before} -> {after}"
+    );
+
+    // Illegal placement is a clean rejection naming the item, not a crash.
+    let err = h.call_err("items.equip", json!({ "item": id, "slot": "Boots" }));
+    assert_eq!(err["code"], json!(-32602));
+    assert!(
+        err["message"].as_str().unwrap_or_default().contains("Goldrim"),
+        "the refusal should name the item: {err}"
+    );
+
+    // Clearing a slot puts the stat back.
+    let cleared = h.call("items.equip", json!({ "slot": "Helmet", "item": false }));
+    assert!(stat(&cleared["stats"], "EnergyShield") < before, "the helmet is off entirely now");
+
+    // Sets: a copy takes the slot assignments and shares the items.
+    let made = h.call("items.newSet", json!({ "title": "bossing", "copyFrom": start["activeSet"] }));
+    let set = made["createdSet"].as_i64().unwrap();
+    assert!(made["items"]["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["title"] == json!("bossing")));
+
+    assert_eq!(
+        h.call("items.activateSet", json!({ "id": set }))["items"]["activeSet"].as_i64(),
+        Some(set)
+    );
+    let renamed = h.call("items.renameSet", json!({ "id": set, "title": "uber" }));
+    assert!(renamed["items"]["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["title"] == json!("uber")));
+
+    // Deleting the active set must leave a live one selected.
+    let deleted = h.call("items.deleteSet", json!({ "id": set }));
+    let active = deleted["items"]["activeSet"].as_i64().unwrap();
+    assert!(deleted["items"]["sets"].as_array().unwrap().iter().any(|s| s["id"].as_i64() == Some(active)));
+
+    assert_eq!(
+        h.call_err("items.deleteSet", json!({ "id": active }))["code"],
+        json!(-32602),
+        "a build must keep at least one item set"
+    );
+
+    // Bad input, rejected rather than absorbed.
+    assert_eq!(h.call_err("items.paste", json!({ "text": "not an item" }))["code"], json!(-32602));
+    assert_eq!(h.call_err("items.equip", json!({ "item": id, "slot": "Nowhere" }))["code"], json!(-32602));
+    assert_eq!(h.call_err("items.delete", json!({ "item": 99999 }))["code"], json!(-32602));
+
+    // And a delete really removes it from the pool.
+    let gone = h.call("items.delete", json!({ "item": id }));
+    assert!(
+        !gone["items"]["items"].as_array().unwrap().iter().any(|i| i["id"].as_i64() == Some(id)),
+        "the deleted item is still in the pool"
+    );
+}
+
+/// Item comparisons, which use the *clean* override channel.
+///
+/// Unlike gems and config, `calcs.initEnv` understands an item-shaped override
+/// (`repSlotName` + `repItem`, `CalcSetup.lua:713-717`), so nothing is mutated
+/// and there is no restore to get wrong. The build cannot be corrupted here.
+///
+/// The subtle part is flasks: they are *toggled*, not replaced
+/// (`ItemDBControl.lua:247`). That is asserted by its signature — replacing an
+/// equipped item with itself is a no-op and reports nothing, but toggling an
+/// equipped flask turns it off and must report plenty.
+#[test]
+fn item_comparisons_use_the_override_channel_and_toggle_flasks() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let state = h.call("items.list", json!({}));
+    let slots = state["slots"].as_array().unwrap();
+    let equipped = |name: &str| -> Option<i64> {
+        slots.iter().find(|s| s["name"] == json!(name))?["itemId"].as_i64()
+    };
+    let compare = |h: &mut Host, change: Value| -> usize {
+        h.call("stats.compare", json!({ "change": change }))["stats"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0)
+    };
+
+    // Emptying a real slot moves a lot of numbers.
+    let bare = compare(&mut h, json!({ "kind": "item", "slot": "Helmet" }));
+    assert!(bare > 0, "taking the helmet off must change something");
+
+    // Replacing an item with itself is a no-op — which is exactly what proves
+    // the ordinary `repItem` path is being taken rather than something that
+    // merely looks like it worked.
+    let body = equipped("Body Armour").expect("the sample has a body armour");
+    assert_eq!(
+        compare(&mut h, json!({ "kind": "item", "slot": "Body Armour", "item": body })),
+        0,
+        "swapping an item for itself cannot change the build"
+    );
+
+    // A flask in its own slot is *not* a no-op, because flasks toggle. If this
+    // reports nothing, `repItem` is being used for a flask and the comparison
+    // is silently measuring nothing.
+    let flask_slots = ["Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"];
+    let mut toggled = 0;
+    for name in flask_slots {
+        if let Some(id) = equipped(name) {
+            toggled += compare(&mut h, json!({ "kind": "item", "slot": name, "item": id }));
+        }
+    }
+    assert!(
+        toggled > 0,
+        "no flask toggle changed anything — the toggleFlask path is not being taken"
+    );
+
+    // The build must be untouched throughout: this channel never mutates, so
+    // this is a regression guard on that promise rather than on a restore.
+    let after = h.call("items.list", json!({}));
+    assert_eq!(after, state, "an item comparison must not change the build");
+
+    for bad in [
+        json!({ "kind": "item", "slot": "Nowhere", "item": body }),
+        json!({ "kind": "item", "slot": "Helmet", "item": 99999 }),
+        json!({ "kind": "item" }),
+    ] {
+        assert_eq!(
+            h.call_err("stats.compare", json!({ "change": bad.clone() }))["code"],
+            json!(-32602),
+            "expected a clean rejection for {bad}"
+        );
+    }
+}
+
+/// Jewel sockets, which are slots that belong to the *tree* rather than to the
+/// item set.
+///
+/// `ItemSlotControl.lua:61-73` stores a socketed jewel on `spec.jewels[nodeId]`,
+/// not on the item set — which is why swapping tree variants swaps your jewels
+/// with them. The item set does hold a `[nodeId]` entry, but it is a trade-search
+/// URL, and reading that reported every socket as empty.
+///
+/// The second half is the destructive path the items tab can reach: a cluster
+/// jewel creates passives, so removing one *unallocates* them. That is a tree
+/// edit made from the gear screen, and it is asserted here rather than trusted.
+#[test]
+fn jewel_sockets_belong_to_the_tree_and_cluster_jewels_carry_passives() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let state = h.call("items.list", json!({}));
+    let slots = state["slots"].as_array().unwrap();
+    let by_id: std::collections::HashMap<i64, &Value> = state["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| (i["id"].as_i64().unwrap(), i))
+        .collect();
+
+    let sockets: Vec<&Value> = slots.iter().filter(|s| s["nodeId"].is_number()).collect();
+    assert!(
+        sockets.len() > 20,
+        "a real tree has dozens of jewel sockets; got {}",
+        sockets.len()
+    );
+
+    let filled: Vec<&&Value> = sockets.iter().filter(|s| s["itemId"].is_number()).collect();
+    assert!(
+        !filled.is_empty(),
+        "the sample character wears jewels — reporting none means the socket \
+         assignment is being read from the item set instead of the tree spec"
+    );
+
+    // Every socketed jewel must actually be a jewel.
+    for slot in &filled {
+        let item = by_id[&slot["itemId"].as_i64().unwrap()];
+        assert_eq!(item["type"], json!("Jewel"), "{item} is not a jewel");
+    }
+
+    let before = h.call("build.summary", json!({}))["pointsUsed"].as_i64().unwrap();
+
+    // A cluster jewel grants passives, so taking it out spends fewer points.
+    let cluster = filled
+        .iter()
+        .find(|s| {
+            by_id[&s["itemId"].as_i64().unwrap()]["baseName"]
+                .as_str()
+                .is_some_and(|b| b.contains("Cluster Jewel"))
+        })
+        .expect("the sample character has a cluster jewel socketed");
+    let slot_name = cluster["name"].as_str().unwrap().to_string();
+    let jewel_id = cluster["itemId"].as_i64().unwrap();
+
+    let removed = h.call("items.equip", json!({ "slot": slot_name, "item": false }));
+    let after = removed["summary"]["pointsUsed"].as_i64().unwrap();
+    assert!(
+        after < before,
+        "removing a cluster jewel must unallocate the passives it granted: \
+         {before} -> {after}"
+    );
+    assert!(
+        removed["items"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == json!(slot_name))
+            .is_some_and(|s| s["itemId"].is_null()),
+        "the socket should read as empty now"
+    );
+
+    // And putting it back restores them, so this is reversible rather than lossy.
+    let restored = h.call("items.equip", json!({ "slot": slot_name, "item": jewel_id }));
+    assert_eq!(
+        restored["summary"]["pointsUsed"].as_i64().unwrap(),
+        before,
+        "re-socketing the cluster jewel must restore its passives"
+    );
+}
+
+/// Abyssal sockets, which exist only while the item granting them is worn.
+///
+/// `ItemSlotControl.lua:98-110` activates them from the equipped item's
+/// `abyssalSocketCount`, so the slot list is not fixed — it grows and shrinks
+/// with your gear. A client that ignores `shown` renders six dead rows on every
+/// belt in the game.
+#[test]
+fn abyssal_sockets_appear_with_the_item_that_grants_them() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let belt_sockets = |state: &Value| -> Vec<bool> {
+        state["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|s| s["name"].as_str().is_some_and(|n| n.starts_with("Belt Abyssal")))
+            .map(|s| s["shown"] == json!(true))
+            .collect()
+    };
+
+    let before = belt_sockets(&h.call("items.list", json!({})));
+    assert!(!before.is_empty(), "the belt has abyssal socket slots defined");
+    assert!(
+        before.iter().all(|shown| !shown),
+        "no abyssal socket should be offered while no abyssal-socketed item is worn"
+    );
+
+    // A Stygian Vise is the belt base that carries exactly one.
+    let raw = "Rarity: RARE\nWoe Locket\nStygian Vise\nItem Level: 84\nImplicits: 0\n\
+               Has 1 Abyssal Socket\n+80 to maximum Life\n";
+    let pasted = h.call("items.paste", json!({ "text": raw }));
+    let belt = pasted["items"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["title"] == json!("Woe Locket"))
+        .expect("the Stygian Vise parsed");
+    assert_eq!(belt["type"], json!("Belt"));
+
+    let equipped = h.call("items.equip", json!({ "slot": "Belt", "item": belt["id"] }));
+    let after = belt_sockets(&equipped["items"]);
+    assert_eq!(
+        after.iter().filter(|s| **s).count(),
+        1,
+        "one abyssal socket, because the item has one — not zero and not all six"
+    );
+    assert!(after[0], "it should be the first socket that opens up");
+}
+
+/// Optimise Sockets: recolour and relink an item to fit the groups in its slot.
+///
+/// Mirrors `SkillsTab.lua:242-283`. The assertion has to start from a *wrong*
+/// item, because the sample character's gear is already correctly coloured and
+/// "nothing changed" would pass whether the code works or not.
+#[test]
+fn optimise_sockets_recolours_an_item_to_fit_its_gems() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let colours = |h: &mut Host, slot_name: &str| -> String {
+        let state = h.call("items.list", json!({}));
+        let id = state["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == json!(slot_name))
+            .and_then(|s| s["itemId"].as_i64())
+            .expect("something is equipped there");
+        let item = state["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["id"].as_i64() == Some(id))
+            .unwrap();
+        item["sockets"]
+            .as_array()
+            .map(|ss| {
+                ss.iter()
+                    .map(|s| s["colour"].as_str().unwrap_or("?"))
+                    .collect::<String>()
+            })
+            .unwrap_or_default()
+    };
+
+    // What the body-armour group actually needs.
+    let skills = h.call("skills.list", json!({}));
+    let group = skills["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["slot"] == json!("Body Armour"))
+        .expect("the sample has a body-armour group");
+    let gem_count = group["gems"].as_array().unwrap().len();
+    assert!(gem_count >= 4, "need a real link setup to optimise against");
+
+    // A six-socket chest coloured entirely wrong.
+    let raw = "Rarity: RARE\nWrong Colours\nAstral Plate\nItem Level: 84\nQuality: 20\n\
+               Sockets: R-R-R-R-R-R\nArmour: 700\nImplicits: 0\n+50 to maximum Life\n";
+    let pasted = h.call("items.paste", json!({ "text": raw }));
+    let chest = pasted["items"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["title"] == json!("Wrong Colours"))
+        .expect("the chest parsed");
+    h.call("items.equip", json!({ "slot": "Body Armour", "item": chest["id"] }));
+
+    let before = colours(&mut h, "Body Armour");
+    assert_eq!(before, "RRRRRR", "the pasted chest should be all red to start with");
+
+    let after_call = h.call("items.optimiseSockets", json!({ "slot": "Body Armour" }));
+    assert!(after_call["skills"].is_object(), "the socket groups are re-read too");
+    let after = colours(&mut h, "Body Armour");
+
+    assert_ne!(after, before, "optimising must actually recolour the sockets");
+    assert_eq!(
+        after.len(),
+        gem_count.min(6),
+        "one socket per gem, up to the base's limit"
+    );
+    assert!(
+        after.contains('B'),
+        "the group's intelligence gems need blue sockets: got {after}"
+    );
+
+    assert_eq!(
+        h.call_err("items.optimiseSockets", json!({ "slot": "Amulet" }))["code"],
+        json!(-32602),
+        "an amulet has no sockets to optimise"
+    );
+}
+
+/// Imbued supports, which apply to an item slot without occupying a socket.
+///
+/// The trap is that **two fields must agree** — `imbuedSupportBySlot[slot]` and
+/// `group.imbuedSupport` — or `CalcSetup.lua:1558` skips it entirely. Setting
+/// one alone is a silent no-op, so this asserts the numbers move rather than
+/// just that the field came back.
+#[test]
+fn an_imbued_support_reaches_the_calculator_and_is_filtered_to_eligible_gems() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    // The eligible set is much smaller than "every support".
+    let all = h.call("skills.gemCatalogue", json!({}));
+    let imbued = h.call("skills.gemCatalogue", json!({ "imbued": true }));
+    let all_n = all["gems"].as_array().unwrap().len();
+    let imbued_gems = imbued["gems"].as_array().unwrap();
+    assert!(
+        imbued_gems.len() < all_n / 2,
+        "imbued gems are a narrow subset; got {} of {all_n}",
+        imbued_gems.len()
+    );
+    assert!(
+        imbued_gems.iter().all(|g| g["support"] == json!(true)),
+        "only supports can be imbued"
+    );
+    assert!(
+        imbued_gems.iter().all(|g| g["exceptional"] == json!(false)),
+        "exceptional and awakened supports cannot be imbued"
+    );
+
+    let group = h.call("skills.list", json!({}))["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["slot"].is_string())
+        .expect("a group assigned to a slot")
+        .clone();
+    let index = group["index"].as_i64().unwrap();
+
+    let gem = imbued_gems
+        .iter()
+        .find(|g| g["name"] == json!("Added Cold Damage"))
+        .expect("Added Cold Damage is imbue-eligible");
+
+    let before = stat(&h.call("stats.get", json!({}))["stats"], "TotalDPS");
+    let set = h.call(
+        "skills.setImbuedSupport",
+        json!({ "group": index, "gemId": gem["id"] }),
+    );
+    let after = stat(&set["stats"], "TotalDPS");
+
+    assert_eq!(
+        set["skills"]["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["index"].as_i64() == Some(index))
+            .unwrap()["imbuedSupport"],
+        json!("Added Cold Damage")
+    );
+    assert_ne!(
+        after, before,
+        "an imbued support must reach the calculator — equal numbers mean only \
+         one of the two required fields was set"
+    );
+
+    // Clearing puts it back.
+    let cleared = h.call("skills.setImbuedSupport", json!({ "group": index, "gemId": false }));
+    assert_eq!(stat(&cleared["stats"], "TotalDPS"), before);
+
+    // Only supports, and only real gems.
+    let active = all["gems"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["support"] == json!(false))
+        .expect("some active gem exists");
+    assert_eq!(
+        h.call_err("skills.setImbuedSupport", json!({ "group": index, "gemId": active["id"] }))["code"],
+        json!(-32602),
+        "an active skill is not a support"
+    );
+}
+
+/// Crafting, and the mod browser, which are one thing.
+///
+/// PoB's nine crafting features all reduce to: take a mod table, filter it with
+/// a PoB predicate, pick one, append its lines to `explicitModLines`, reparse.
+/// The tables and the predicates are PoB's — `GetModSpawnWeight` in particular,
+/// which is what makes a mod legal on one item and not another.
+#[test]
+fn mod_pools_are_filtered_by_the_item_and_applying_one_moves_the_numbers() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let state = h.call("items.list", json!({}));
+    let equipped = |name: &str| -> i64 {
+        state["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == json!(name))
+            .and_then(|s| s["itemId"].as_i64())
+            .unwrap_or_else(|| panic!("nothing equipped in {name}"))
+    };
+    let body = equipped("Body Armour");
+
+    // Sources are per item: a body armour gets the bench and necropolis, a
+    // flask gets neither.
+    let sources: Vec<String> = h.call("items.modSources", json!({ "item": body }))["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(sources.contains(&"MASTER".to_string()));
+    assert!(sources.contains(&"NECROPOLIS".to_string()));
+    assert!(sources.contains(&"CUSTOM".to_string()), "custom text is always available");
+
+    let flask = equipped("Flask 1");
+    let flask_sources: Vec<String> = h.call("items.modSources", json!({ "item": flask }))["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        !flask_sources.contains(&"NECROPOLIS".to_string())
+            && !flask_sources.contains(&"ESSENCE".to_string()),
+        "a flask takes neither necropolis mods nor essences: {flask_sources:?}"
+    );
+
+    // Every source produces a real, filtered pool.
+    for source in ["MASTER", "PREFIX", "SUFFIX", "VEILED", "DELVE"] {
+        let pool = h.call("items.modPool", json!({ "item": body, "source": source }));
+        let mods = pool["mods"].as_array().unwrap();
+        assert!(!mods.is_empty(), "{source} produced no candidates");
+
+        // `supported` must be meaningful, not uniformly false. It reads
+        // `(11-28)% increased Energy Shield` — a range `parseMod` cannot take —
+        // so the range has to be resolved before asking, or nearly every mod in
+        // the game reports as unsupported.
+        let unsupported = mods.iter().filter(|m| m["supported"] == json!(false)).count();
+        assert!(
+            unsupported * 4 < mods.len(),
+            "{source}: {unsupported} of {} unsupported — the range is probably not \
+             being resolved before parsing",
+            mods.len()
+        );
+    }
+
+    // Search narrows without changing the shape.
+    let found = h.call(
+        "items.modPool",
+        json!({ "item": body, "source": "MASTER", "search": "maximum energy shield" }),
+    );
+    let candidates = found["mods"].as_array().unwrap();
+    assert!(!candidates.is_empty());
+    assert!(
+        candidates
+            .iter()
+            .all(|m| m["label"].as_str().unwrap().to_lowercase().contains("energy shield")),
+        "search must actually filter"
+    );
+
+    // Apply one, and the stat panel has to move.
+    let before = stat(&h.call("stats.get", json!({}))["stats"], "EnergyShield");
+    let pick = candidates
+        .iter()
+        .find(|m| m["supported"] == json!(true))
+        .expect("at least one supported ES craft");
+    let added = h.call(
+        "items.addMod",
+        json!({ "item": body, "source": "MASTER", "index": pick["index"] }),
+    );
+    let after = stat(&added["stats"], "EnergyShield");
+    assert!(after > before, "a crafted ES mod must raise ES: {before} -> {after}");
+
+    // It lands as an explicit line carrying the crafted flag — there is no
+    // separate crafting model in PoB.
+    let item = added["items"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["id"].as_i64() == Some(body))
+        .unwrap();
+    let crafted: Vec<&Value> = item["mods"]["explicit"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m["crafted"] == json!(true))
+        .collect();
+    assert!(!crafted.is_empty(), "the added mod should be flagged crafted");
+
+    // And removing it puts the number back exactly.
+    let index = crafted
+        .iter()
+        .find(|m| m["line"].as_str().unwrap().contains("Energy Shield"))
+        .unwrap()["index"]
+        .clone();
+    let removed = h.call(
+        "items.removeMod",
+        json!({ "item": body, "list": "explicit", "index": index }),
+    );
+    assert_eq!(stat(&removed["stats"], "EnergyShield"), before);
+
+    // Free text goes through the same door.
+    let custom = h.call(
+        "items.addMod",
+        json!({ "item": body, "source": "CUSTOM", "text": "+100 to maximum Energy Shield" }),
+    );
+    assert!(stat(&custom["stats"], "EnergyShield") > before);
+
+    for bad in [
+        json!({ "item": body, "source": "NONSENSE" }),
+        json!({ "item": 99999, "source": "MASTER" }),
+    ] {
+        assert_eq!(h.call_err("items.modPool", bad.clone())["code"], json!(-32602), "{bad}");
+    }
+    assert_eq!(
+        h.call_err("items.addMod", json!({ "item": body, "source": "CUSTOM", "text": "  " }))["code"],
+        json!(-32602),
+        "empty custom text is not a modifier"
+    );
+}
+
+/// The implicit family — corrupted, Searing Exarch, Eater of Worlds.
+///
+/// Same filter as the explicit sources (`mod.type` against the source id, then
+/// `GetModSpawnWeight`), which is why they cost almost nothing on top. What
+/// differs is where they land: `implicitModLines` rather than the explicits,
+/// and corrupting additionally flags the item.
+#[test]
+fn implicit_sources_land_on_the_implicit_list_and_corrupting_flags_the_item() {
+    let mut h = host();
+    h.call("build.load", json!({ "character": character_payload() }));
+
+    let state = h.call("items.list", json!({}));
+    let body = state["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == json!("Body Armour"))
+        .and_then(|s| s["itemId"].as_i64())
+        .expect("the sample has a body armour");
+
+    let sources: Vec<String> = h.call("items.modSources", json!({ "item": body }))["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect();
+    for wanted in ["CORRUPTED", "EXARCH", "EATER"] {
+        assert!(sources.contains(&wanted.to_string()), "missing {wanted}: {sources:?}");
+    }
+
+    let counts = |h: &mut Host| -> (usize, usize) {
+        let item = h.call("items.list", json!({}))["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["id"].as_i64() == Some(body))
+            .unwrap()
+            .clone();
+        (
+            item["mods"]["implicit"].as_array().map(|a| a.len()).unwrap_or(0),
+            item["mods"]["explicit"].as_array().map(|a| a.len()).unwrap_or(0),
+        )
+    };
+    let (implicits_before, explicits_before) = counts(&mut h);
+
+    // An eldritch implicit lands on the implicit list, and nowhere else.
+    let pool = h.call("items.modPool", json!({ "item": body, "source": "EXARCH" }));
+    let pick = pool["mods"].as_array().unwrap().first().expect("exarch mods exist").clone();
+    h.call("items.addMod", json!({ "item": body, "source": "EXARCH", "index": pick["index"] }));
+
+    let (implicits_after, explicits_after) = counts(&mut h);
+    assert_eq!(implicits_after, implicits_before + 1, "it belongs on the implicit list");
+    assert_eq!(explicits_after, explicits_before, "and must not touch the explicits");
+
+    // Corrupting sets the flag on the item.
+    let corrupt_pool = h.call("items.modPool", json!({ "item": body, "source": "CORRUPTED" }));
+    let corrupt_pick = corrupt_pool["mods"]
+        .as_array()
+        .unwrap()
+        .first()
+        .expect("corrupted implicits exist")
+        .clone();
+    let corrupted = h.call(
+        "items.addMod",
+        json!({ "item": body, "source": "CORRUPTED", "index": corrupt_pick["index"] }),
+    );
+
+    let item = corrupted["items"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["id"].as_i64() == Some(body))
+        .unwrap();
+    assert_eq!(item["corrupted"], json!(true), "a corrupted implicit corrupts the item");
+
+    // And crafting stays available, deliberately. In the game a corrupted item
+    // cannot be crafted; PoB does not enforce that, because it is a planner and
+    // you may be modelling an item you already own. `modifiableItem`
+    // (`ItemsTab.lua:1840`) is the only place corruption gates anything, and it
+    // guards anoint-copying rather than the mod sources. Matching PoB here is
+    // the point — inventing the restriction would make real items unmodellable.
+    let after: Vec<String> = h.call("items.modSources", json!({ "item": body }))["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        after.contains(&"MASTER".to_string()),
+        "PoB keeps the bench available on a corrupted item: {after:?}"
+    );
 }

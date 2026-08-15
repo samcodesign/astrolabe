@@ -172,8 +172,15 @@ function StatRowView({ row, comparing }: { row: StatRow; comparing: boolean }) {
       <span className="srow__label" title={row.key}>
         {row.label}
       </span>
+      {/* PoB assigns a colour to 77 of its display stats — Mana Cost in mana
+          blue, Strength in marauder red, every resistance and pool
+          (`BuildDisplayStats.lua`). `api/stats.lua` parses those `^xRRGGBB`
+          escapes into a hex string, so it is applied directly. This used to
+          read `row.colour === "gold"`, comparing against a value the engine
+          has never sent, and every one of them rendered grey. */}
       <span
-        className={`srow__value selectable ${row.colour === "gold" ? "srow__value--gold" : ""}`}
+        className="srow__value selectable"
+        {...(row.colour ? { style: { color: row.colour } } : {})}
       >
         {formatStatValue(row)}
         {row.overCap !== undefined && (
